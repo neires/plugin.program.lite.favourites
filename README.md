@@ -67,8 +67,8 @@ Nutze das im Repository beiliegende Skript `dropbox_token.py`:
 1. Öffne `dropbox_token.py` in einem Texteditor.
 2. Trage oben deinen `APP_KEY` und dein `APP_SECRET` ein.
 3. Starte das Skript (Python erforderlich): `python dropbox_token.py`.
-4. Folge den Anweisungen im Browser und kopiere den erhaltenen Code zurück in das Skript.
-5. Das Skript zeigt dir nun den **Refresh Token** an.
+4. Folge den Anweisungen in der Konsole und im Browser und kopiere den im Schritt 2 angezeigten App Folder Name und in Schritt 3 erhaltenen Code in die Konsole.
+5. Das Skript zeigt dir danach den **Refresh Token** an.
 6. Die Tokens werden zusätzlich lokal in der 'dropbox_tokens.txt' unter %USERPROFILE%\Downloads gespeichert! und beim beenden geöffnet
 
 ### 3. Addon in Kodi konfigurieren

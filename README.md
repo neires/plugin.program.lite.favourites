@@ -22,7 +22,27 @@ Ein schlankes, aber leistungsstarkes Kodi-Addon zur Verwaltung personalisierter 
 * **Dynamische Ansicht:** Das Addon erkennt den Inhaltstyp (Movies vs. TV Shows), damit Kodi automatisch das passende Layout wählt.
 
 ---
+## 🎬 Erste Schritte (Quickstart-Guide)
 
+So legst du direkt nach der Installation los und fügst deine erste Serie hinzu:
+
+### 1. Den ersten Ordner anlegen
+1. Öffne das **Lite Favourites** Addon in Kodi.
+2. Da die Liste beim ersten Start noch leer ist, klicke auf den Button **[+] Ersten Ordner erstellen**.
+3. Gib über die Bildschirmtastatur den gewünschten Namen ein (z. B. `Serien`) und bestätige. Der Ordner ist nun angelegt!
+
+### 2. Eine Serie finden
+1. Verlasse *Lite Favourites* und öffne dein Quell-Addon, zum Beispiel den **TMDbHelper**.
+2. Navigiere dort zu einer Liste mit Inhalten, z. B. unter **Serien** ➡️ **Diese Woche im Trend**.
+3. Wähle eine Serie aus, die du in deinen Favoriten speichern möchtest.
+
+### 3. Zu den Favoriten hinzufügen
+1. Öffne auf der Serie das Kodi-Kontextmenü (Rechtsklick, Taste `C` auf der Tastatur oder langes Drücken der OK-Taste auf der Fernbedienung).
+2. Wähle den Eintrag zum Hinzufügen (z. B. **Zu Lite Favourites hinzufügen**).
+3. Es öffnet sich ein Auswahlfenster deines Addons: Wähle hier deinen zuvor erstellten Ordner **Serien** aus.
+4. **Fertig!** Das Addon lädt nun automatisch die hochauflösenden Poster, Fanarts und Beschreibungen herunter. Die Serie ist jetzt sauber strukturiert in *Lite Favourites* abrufbar.
+
+---
 ## ☁️ Optionale Einrichtung: Dropbox-Sync
 
 Der Sync ermöglicht es, deine Favoriten-Liste auf allen Kodi-Geräten (TV, Tablet, Smartphone) identisch zu halten.
@@ -74,6 +94,10 @@ Sobald ein Gerät läuft, kannst du die Einrichtung einfach übertragen:
 4. Im laufenden Betrieb kann direkt per Kontextmenü auf ein Item " Sync mit Dropbox" aufgerufen werden.
 Der Inhalt wird dann automatisch refresht.
 
-#Vorschau
+---
+
+## Vorschau
+So sieht das auf meinem Skin skin.arctic.zephyr.martian aus
+https://github.com/martian89/skin.arctic.zephyr.martian
 
 <img width="960" height="540" alt="lite favourites" src="https://github.com/user-attachments/assets/e0603f69-cfd9-425f-a0f2-521260f953f1" />

@@ -42,6 +42,8 @@ So legst du direkt nach der Installation los und fügst deine erste Serie hinzu:
 3. Es öffnet sich ein Auswahlfenster deines Addons: Wähle hier deinen zuvor erstellten Ordner **Serien** aus.
 4. **Fertig!** Das Addon lädt nun automatisch die hochauflösenden Poster, Fanarts und Beschreibungen herunter. Die Serie ist jetzt sauber strukturiert in *Lite Favourites* abrufbar.
 5. Ihr könnt euch auch die Ordner Serien / Filme auf eurer Home-Menü verlinken wie bei mir zusehen ist.
+6. Mein Ordner Serien beinhaltet Serien die ich gerade schaue.
+Zusätzlich die Unterordner Eingestellt, Merkliste, Komplett, Staffelpause, da schiebe ich dann nach Lust und Laune hin un her.
 
 ---
 ## ☁️ Optionale Einrichtung: Dropbox-Sync

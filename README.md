@@ -90,17 +90,18 @@ Beispiel-Inhalt der settings.xml:
 </settings>
 
 ### 4. Multi-Geräte Setup (Copy & Paste)
-Sobald ein Gerät läuft, kannst du die Einrichtung einfach übertragen:
-1. Kopiere den Ordner `plugin.program.lite.favourites` aus dem `addon_data` Verzeichnis deines fertig konfigurierten Geräts.
+Sobald ein Gerät läuft, kannst du die Einstellungen/Dropboxtoken einfach übertragen:
+1. Kopiere den Ordner `userdata/addon_data/plugin.program.lite.favourites` deines fertig konfigurierten Gerätes.
 2. Füge ihn auf allen anderen Geräten (Android, Windows, CoreELEC etc.) im entsprechenden Verzeichnis ein.
 3. **Fertig:** Alle Geräte nutzen nun denselben Dropbox-Sync-Kanal und sind sofort einsatzbereit, ohne dass du erneut Tokens generieren musst.
 4. Im laufenden Betrieb kann direkt per Kontextmenü auf ein Item " Sync mit Dropbox" aufgerufen werden.
-Der Inhalt wird dann automatisch refresht.
+Je nachdem was älter oder neuer ist löst dann den Upload oder Download aus, oder nichts falls der Inhalt gleich ist.
+Der Inhalt wird dann automatisch adhoc refresht.
 
 ---
 
 ## Vorschau
-So sieht das auf meinem Skin skin.arctic.zephyr.martian aus
+So sieht das auf meinem Kodi 22 Piers mit dem skin.arctic.zephyr.martian aus.
 https://github.com/martian89/skin.arctic.zephyr.martian
 
 <img width="960" height="540" alt="lite favourites" src="https://github.com/user-attachments/assets/e0603f69-cfd9-425f-a0f2-521260f953f1" />

@@ -1,5 +1,6 @@
 # Lite Favourites (plugin.program.lite.favourites)
 
+Mein eigener Ersatz(komplett neuer Code ohne Altlasten) für das alte Plugin Super Favourites.
 Ein schlankes, aber leistungsstarkes Kodi-Addon zur Verwaltung personalisierter Favoriten mit automatischer Metadaten-Anreicherung und Cloud-Synchronisation via Dropbox.
 ---
 ## 🚀 Hauptfunktionen
@@ -14,7 +15,7 @@ Ein schlankes, aber leistungsstarkes Kodi-Addon zur Verwaltung personalisierter 
 ### 🎭 Metadaten & Scraping
 * **TMDb-Integration:** Das Addon extrahiert TMDb-IDs aus URLs und reichert Einträge automatisch mit Postern, Fanarts, Plots und Genres an.
 * **TMDbHelper-Anbindung:** Nutzt (falls vorhanden) die lokale Datenbank des *TMDbHelper* Addons für blitzschnelle Informationen.
-* **Manuelle Korrektur:** Bietet die Möglichkeit, fehlerhafte TMDb-IDs über eine integrierte Suche oder manuelle Eingabe zu korrigieren.
+* **Wenn alle Poster einmal geladen sind, werden sie nicht mehr erneut aus dem Internet geladen sondern direkt und rasant aus \userdata\Thumbnails.
 
 ### 🛠 Bedienkomfort (UX)
 * **Kontextmenü-Integration:** Füge Inhalte direkt aus anderen Addons während des Browsens zu deinen Lite Favourites hinzu.

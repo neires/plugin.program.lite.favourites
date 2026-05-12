@@ -82,7 +82,7 @@ Der Sync ermöglicht es, deine Favoriten-Liste auf allen Kodi-Geräten identisch
 5. Kopiere im Reiter **"Settings"** den **App Key** und das **App Secret**.
 
 ### 2. Tokens generieren (am Computer)
-Nutze das im Repository beiliegende Skript `dropbox_token.py`:
+Nutze das im Repository, oder im Plugin-Ordner, beiliegende Skript `dropbox_token.py`:
 1. Öffne `dropbox_token.py` in einem Texteditor und trage oben deinen `APP_KEY` und dein `APP_SECRET` ein.
 2. Starte das Skript (Python erforderlich): `python dropbox_token.py`.
 3. Folge den Anweisungen: Kopiere den App Folder Name (Schritt 2) und den erhaltenen Browser-Code (Schritt 3) in die Konsole.

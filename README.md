@@ -7,6 +7,10 @@ Ein schlankes, aber leistungsstarkes Kodi-Addon zur Verwaltung personalisierter 
 Funktioniert mit Kodi 19 (Matrix), Kodi 20 (Nexus), Kodi 21 (Omega) und Kodi 22 (Piers).
 
 ---
+## Installation:
+
+* *Lade die [plugin.program.lite.favourites.zip](https://github.com/neires/plugin.program.lite.favourites/raw/main/plugin.program.lite.favourites.zip) herunter und installiere sie in Kodi über **Addons** ➡️ **Aus Zip-Datei installieren**.
+---
 
 ## 🚀 Hauptfunktionen
 

@@ -1,6 +1,7 @@
 # Lite Favourites (plugin.program.lite.favourites)
 
 Mein eigener Ersatz (komplett neuer Code ohne Altlasten) für das alte Plugin *Super Favourites*. 
+
 Ein schlankes, aber leistungsstarkes Kodi-Addon zur Verwaltung personalisierter Favoriten mit automatischer Metadaten-Anreicherung und Cloud-Synchronisation via Dropbox.
 
 ---
@@ -88,11 +89,12 @@ Nutze das im Repository beiliegende Skript `dropbox_token.py`:
 4. Das Skript zeigt danach den **Refresh Token** an und speichert ihn in der Datei `dropbox_tokens.txt` im Downloads-Verzeichnis.
 
 ### 3. Addon in Kodi konfigurieren
-App Key, App Secret, Refresh Token, App Folder Name
-Trage die Daten in den Addon-Einstellungen ein oder editiere direkt die `settings.xml`. 
+Trage die Daten, App Key, App Secret, Refresh Token, App Folder Name, in den Addon-Einstellungen ein oder editiere direkt die `settings.xml`. 
 
 > **Info:** Der **Refresh Token** ist dein dauerhafter "Generalschlüssel".
+
 > Er verfällt nicht und erlaubt dem Addon, selbstständig kurzlebige Access Tokens zu generieren.
+
 > Du musst nur diese 4 Werte hinterlegen – den Rest erledigt das Addon beim ersten Sync automatisch.
 
 **Pfad:** `userdata/addon_data/plugin.program.lite.favourites/settings.xml`

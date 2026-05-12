@@ -4,6 +4,8 @@ Mein eigener Ersatz (komplett neuer Code ohne Altlasten) für das alte Plugin *S
 
 Ein schlankes, aber leistungsstarkes Kodi-Addon zur Verwaltung personalisierter Favoriten mit automatischer Metadaten-Anreicherung und Cloud-Synchronisation via Dropbox.
 
+Funktioniert mit Kodi 19 (Matrix), Kodi 20 (Nexus), Kodi 21 (Omega) und Kodi 22 (Piers).
+
 ---
 
 ## 🚀 Hauptfunktionen

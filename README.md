@@ -9,7 +9,8 @@ Funktioniert mit Kodi 19 (Matrix), Kodi 20 (Nexus), Kodi 21 (Omega) und Kodi 22 
 ---
 ## Installation:
 
-* *Lade die [plugin.program.lite.favourites.zip](https://github.com/neires/plugin.program.lite.favourites/raw/main/plugin.program.lite.favourites.zip) herunter und installiere sie in Kodi über **Addons** ➡️ **Aus Zip-Datei installieren**.
+* *Lade die plugin.program.lite.favourites.zip aus dem Ordner zips herunter
+* installiere diese in Kodi über **Addons** ➡️ **Aus Zip-Datei installieren**.
 ---
 
 ## 🚀 Hauptfunktionen

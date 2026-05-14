@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="plugin.program.lite.favourites" name="Lite Favourites" version="1.2.0" provider-name="neires">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0"/>
+		<import addon="script.module.requests"/>
+		<import addon="script.module.dateutil"/>
+    </requires>
+    <extension point="xbmc.python.pluginsource" library="addon.py">
+        <provides>video</provides>
+    </extension>
+    <extension point="kodi.context.item" library="context.py">
+		<platform>all</platform>
+        <item>
+            <label>Zu Lite Favourites hinzufügen</label>
+            <visible>!String.IsEmpty(ListItem.FolderPath) | !String.IsEmpty(ListItem.FilenameAndPath)</visible>
+        </item>
+	</extension>
+	<extension point="xbmc.addon.metadata">
+		<summary lang="de">Lite Favourites</summary>
+		<description lang="de_DE">Mein eigener Ersatz für das alte Plugin Super Favourites zum Verwalten von Favoriten und Ordnern mit Kontextmenü-Integration.</description>
+		<description lang="en_GB">My own replacement for the old Super Favourites plugin for managing favorites and folders with context menu integration.</description>
+		<platform>all</platform>
+        <license>GPL-3.0-or-later</license>
+		<website>https://github.com/neires/plugin.program.lite.favourites</website>
+        <assets>
+            <icon>resources/icon.png</icon>
+            <fanart>resources/fanart.jpg</fanart>
+        </assets>
+	</extension>
+</addon>

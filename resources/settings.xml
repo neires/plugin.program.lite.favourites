@@ -75,4 +75,7 @@
              default="Bereit"
              visible="true" />
   </category>
+  <category label="Import ">
+    <setting id="import_sf" type="action" label="Klick --> Alte Super Favourites XML importieren, Filme oder Serien." action="RunPlugin(plugin://plugin.program.lite.favourites/?mode=import_sf)" />
+  </category>  
 </settings>

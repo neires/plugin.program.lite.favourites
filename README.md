@@ -50,7 +50,15 @@ Funktioniert mit Kodi 19 (Matrix), Kodi 20 (Nexus), Kodi 21 (Omega) und Kodi 22 
 5. Wähle im Auswahlfenster deinen zuvor erstellten Ordner **Serien** aus.
 6. **Fertig!** Das Addon lädt nun automatisch hochauflösende Poster, Fanarts und Beschreibungen inklusive IMDb-Rating herunter.
 
-### 3. Tipps zur Struktur
+### 3. Import alter Super Favourites
+Falls du vom alten Addon *Super Favourites* umsteigst, kannst du deine bisherigen Einträge intelligent übernehmen:
+1. Öffne die **Einstellungen** von *Lite Favourites*.
+2. Navigiere zum Reiter **"Import"**.
+3. Klicke auf **"Super Favourites XML importieren"**.
+4. Wähle im Dateibrowser deine alte `favourites.xml` aus (der Standard-Pfad öffnet sich meist automatisch).
+5. **Zurücklehnen:** Das Addon liest die Datei ein, erkennt automatisch, ob es sich um Filme oder Serien handelt, und sortiert alle Einträge nahtlos in deine neue Ordnerstruktur ein!
+
+### 4. Tipps zur Struktur
 * Verlinke dir die Ordner `Serien` / `Filme` direkt in dein Home-Menü (Skin-abhängig).
 * Mein Ordner `Serien` beinhaltet Serien, die ich gerade schaue. Zusätzlich nutze ich Unterordner wie *Eingestellt, Merkliste, Komplett, Staffelpause* – dorthin schiebe ich die Items nach Lust und Laune per Kontextmenü-Verschiebe-Logik.
 

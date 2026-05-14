@@ -1,5 +1,6 @@
 # 2026-05-10 by neires
 # edit 2026-05-12
+# edit 2026-05-13 add Neuer Ordner in dialog.select
 import sys
 import os
 import json
@@ -943,18 +944,45 @@ def add_to_favourites_from_context():
 
     data = load_favourites()
     folders = get_scoped_folders(data, scope)
-    folder_names = [f[0] for f in folders]
+    
+    # "Neuer Ordner" Option zur Liste hinzufügen
+    folder_names = ["[ Neuer Ordner... ]"] + [f[0] for f in folders]
+    
     dialog = xbmcgui.Dialog()
-
     xbmc.sleep(100)
-    selected = dialog.select('Ordner auswählen', folder_names)
-    if selected >= 0:
-        folder_id = folders[selected][1]
+    selected = dialog.select('Zielordner auswählen', folder_names)
+    
+    if selected == 0:
+        # User möchte einen neuen Ordner erstellen
+        kb = xbmc.Keyboard('', f'Neuen Ordner in "{scope}" erstellen')
+        kb.doModal()
+        if kb.isConfirmed() and kb.getText():
+            new_folder_name = kb.getText()
+            # Finde die Root-ID für den Scope (Serien oder Filme)
+            parent_id = find_root_folder_id(data, scope) or 'root'
+            
+            # Ordner erstellen
+            add_folder(new_folder_name, parent_id)
+            
+            # Da add_folder die Daten speichert, müssen wir sie für den Favoriten neu laden
+            data = load_favourites()
+            new_folder_id = parent_id + '/' + new_folder_name if parent_id != 'root' else new_folder_name
+            
+            # Item direkt in den neu erstellten Ordner speichern
+            video_info['mediatype'] = 'tvshow' if item_type == 'tvshow' else 'movie'
+            video_info = clean_info_dict(video_info)
+            art = clean_artwork(art)
+            if add_favourite(label, path, new_folder_id, item_type, art, video_info):
+                xbmcgui.Dialog().notification('Lite Favourites', f'In neuen Ordner "{new_folder_name}" gespeichert', xbmcgui.NOTIFICATION_INFO, 3000)
+
+    elif selected > 0:
+        # User hat einen existierenden Ordner gewählt (Index - 1 wegen "Neuer Ordner" Eintrag)
+        folder_id = folders[selected - 1][1]
         video_info['mediatype'] = 'tvshow' if item_type == 'tvshow' else 'movie'
         video_info = clean_info_dict(video_info)
         art = clean_artwork(art)
         if add_favourite(label, path, folder_id, item_type, art, video_info):
-            xbmcgui.Dialog().notification('Lite Favourites', 'Zu "' + folders[selected][0] + '" hinzugefügt', xbmcgui.NOTIFICATION_INFO, 3000)
+            xbmcgui.Dialog().notification('Lite Favourites', 'Zu "' + folders[selected - 1][0].strip() + '" hinzugefügt', xbmcgui.NOTIFICATION_INFO, 3000)
 
 # ============ DROPBOX SYNC FUNKTIONEN ============
 

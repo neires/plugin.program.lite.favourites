@@ -2,6 +2,7 @@
 # edit 2026-05-12
 # edit 2026-05-13 add Neuer Ordner in dialog.select
 # edit 2026-05-14 add import dialog - Alte Super Favourites XML
+# edit 2026-05-14 add DUPLIKATS-CHECK für Import  Super Favourites
 import sys
 import os
 import json
@@ -261,10 +262,11 @@ def import_super_favourites():
 
     try:
         local_xml_path = xbmcvfs.translatePath(xml_file)
+        import xml.etree.ElementTree as ET
         tree = ET.parse(local_xml_path)
         root = tree.getroot()
 
-        # Lädt existierende JSON (oder liefert {'root': []}, falls keine existiert)
+        # Lädt existierende JSON
         data = load_favourites()
 
         # --- SCHRITT 1: Vorhandene Ordner-Struktur analysieren ---
@@ -277,7 +279,6 @@ def import_super_favourites():
                     f_id = folder.get('id')
                     f_name = str(folder.get('name', '')).lower()
                     
-                    # 1.1: Ordnerinhalt prüfen (gibt es darin schon Serien oder Filme?)
                     folder_content = data.get(f_id, [])
                     has_tv = any(i.get('type') == 'tvshow' for i in folder_content)
                     has_movie = any(i.get('type') in ('item', 'movie') for i in folder_content)
@@ -287,13 +288,12 @@ def import_super_favourites():
                     elif has_movie and not movie_folder_id:
                         movie_folder_id = f_id
                         
-                    # 1.2: Fallback - Ordnernamen prüfen (falls der Ordner leer ist)
                     elif not tv_folder_id and any(x in f_name for x in ['serie', 'tv', 'show']):
                         tv_folder_id = f_id
                     elif not movie_folder_id and any(x in f_name for x in ['film', 'movie']):
                         movie_folder_id = f_id
 
-        # --- SCHRITT 2: Fallback Ordner erstellen, falls keine gefunden wurden ---
+        # --- SCHRITT 2: Fallback Ordner erstellen ---
         if not tv_folder_id:
             tv_folder_id = 'Serien'
             if 'root' not in data: data['root'] = []
@@ -306,15 +306,15 @@ def import_super_favourites():
             if not any(f.get('id') == movie_folder_id for f in data['root']):
                 data['root'].append({"type": "folder", "name": "Filme", "id": movie_folder_id})
 
-        # Arrays für die Zielordner sicherstellen
         if tv_folder_id not in data: data[tv_folder_id] = []
         if movie_folder_id not in data: data[movie_folder_id] = []
 
-        count = 0
+        count_imported = 0
+        count_skipped = 0
         favs = root.findall('favourite')
         total_favs = len(favs)
 
-        # --- SCHRITT 3: XML durchlaufen und Typ anhand URL zuweisen ---
+        # --- SCHRITT 3: XML durchlaufen ---
         for i, fav in enumerate(favs):
             name = fav.get('name')
             thumb = fav.get('thumb')
@@ -332,8 +332,6 @@ def import_super_favourites():
             if not match: continue
                 
             full_url = match.group(1)
-            
-            # Prüfen ob TV-Show oder Movie im URL-String steht
             url_lower = full_url.lower()
             is_tv = 'type=tv' in url_lower or 'tvshow' in url_lower
             
@@ -349,6 +347,7 @@ def import_super_favourites():
             genre = ""
             
             if sf_options_encoded:
+                from urllib.parse import unquote, parse_qs
                 sf_options_decoded = unquote(sf_options_encoded)
                 sf_dict = parse_qs(sf_options_decoded)
                 
@@ -361,7 +360,6 @@ def import_super_favourites():
                     genre = meta_dict.get('genre', [''])[0]
                     genre = genre.replace(" + / + ", " / ").replace("+", " ")
 
-            # Zuweisung basierend auf dem erkannten Typ
             target_folder = tv_folder_id if is_tv else movie_folder_id
             item_type = "tvshow" if is_tv else "item"
             mediatype = "tvshow" if is_tv else "movie"
@@ -382,12 +380,24 @@ def import_super_favourites():
                 }
             }
             
+            # --- NEU: SILENT DUPLIKATS-CHECK ---
+            # Wir nutzen deine bestehende Funktion _find_duplicate_folders_anywhere
+            if _find_duplicate_folders_anywhere(data, new_entry):
+                count_skipped += 1
+                continue # Überspringt das Speichern und macht beim nächsten Item weiter
+            
             data[target_folder].append(new_entry)
-            count += 1
+            count_imported += 1
 
         save_favourites(data)
         progress.close()
-        xbmcgui.Dialog().notification('Lite Favourites', f'{count} Items intelligent importiert!', xbmcgui.NOTIFICATION_INFO, 3500)
+        
+        # Angepasste Erfolgsmeldung
+        msg = f'{count_imported} neu importiert'
+        if count_skipped > 0:
+            msg += f', {count_skipped} übersprungen (Duplikate)'
+            
+        xbmcgui.Dialog().notification('Lite Favourites Import', msg, xbmcgui.NOTIFICATION_INFO, 4000)
 
     except Exception as e:
         if progress: progress.close()

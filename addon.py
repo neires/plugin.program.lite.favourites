@@ -1,6 +1,7 @@
 # 2026-05-10 by neires
 # edit 2026-05-12
 # edit 2026-05-13 add Neuer Ordner in dialog.select
+# edit 2026-05-14 add import dialog - Alte Super Favourites XML
 import sys
 import os
 import json
@@ -11,13 +12,16 @@ import xbmcaddon
 import xbmcvfs
 import time
 import threading
+import xml.etree.ElementTree as ET
+import re
+from urllib.parse import unquote, parse_qs
 from datetime import datetime
 
 try:
-    from urllib.parse import parse_qsl, urlencode, quote
+    from urllib.parse import parse_qsl, urlencode, quote, unquote, parse_qs
 except ImportError:
-    from urlparse import parse_qsl
-    from urllib import urlencode
+    from urlparse import parse_qsl, parse_qs
+    from urllib import urlencode, unquote
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
@@ -237,6 +241,158 @@ def add_folder(folder_name, parent='root'):
         data[folder_id] = []
     save_favourites(data)
     xbmcgui.Dialog().notification('Lite Favourites', 'Ordner erstellt: ' + folder_name, xbmcgui.NOTIFICATION_INFO, 2000)
+
+
+def import_super_favourites():
+    # Definiere den Standardpfad zu Super Favourites
+    sf_dir = xbmcvfs.translatePath('special://userdata/addon_data/plugin.program.super.favourites/')
+    if not xbmcvfs.exists(sf_dir):
+        sf_dir = xbmcvfs.translatePath('special://userdata/addon_data/')
+
+    # Öffne den Kodi-Dateibrowser
+    dialog = xbmcgui.Dialog()
+    xml_file = dialog.browse(1, 'Super Favourites XML auswählen', 'files', '.xml', False, False, sf_dir)
+
+    if not xml_file:
+        return
+
+    progress = xbmcgui.DialogProgress()
+    progress.create('Lite Favourites', 'Importiere Favoriten...')
+
+    try:
+        local_xml_path = xbmcvfs.translatePath(xml_file)
+        tree = ET.parse(local_xml_path)
+        root = tree.getroot()
+
+        # Lädt existierende JSON (oder liefert {'root': []}, falls keine existiert)
+        data = load_favourites()
+
+        # --- SCHRITT 1: Vorhandene Ordner-Struktur analysieren ---
+        tv_folder_id = None
+        movie_folder_id = None
+
+        if 'root' in data:
+            for folder in data['root']:
+                if folder.get('type') == 'folder':
+                    f_id = folder.get('id')
+                    f_name = str(folder.get('name', '')).lower()
+                    
+                    # 1.1: Ordnerinhalt prüfen (gibt es darin schon Serien oder Filme?)
+                    folder_content = data.get(f_id, [])
+                    has_tv = any(i.get('type') == 'tvshow' for i in folder_content)
+                    has_movie = any(i.get('type') in ('item', 'movie') for i in folder_content)
+
+                    if has_tv and not tv_folder_id:
+                        tv_folder_id = f_id
+                    elif has_movie and not movie_folder_id:
+                        movie_folder_id = f_id
+                        
+                    # 1.2: Fallback - Ordnernamen prüfen (falls der Ordner leer ist)
+                    elif not tv_folder_id and any(x in f_name for x in ['serie', 'tv', 'show']):
+                        tv_folder_id = f_id
+                    elif not movie_folder_id and any(x in f_name for x in ['film', 'movie']):
+                        movie_folder_id = f_id
+
+        # --- SCHRITT 2: Fallback Ordner erstellen, falls keine gefunden wurden ---
+        if not tv_folder_id:
+            tv_folder_id = 'Serien'
+            if 'root' not in data: data['root'] = []
+            if not any(f.get('id') == tv_folder_id for f in data['root']):
+                data['root'].append({"type": "folder", "name": "Serien", "id": tv_folder_id})
+        
+        if not movie_folder_id:
+            movie_folder_id = 'Filme'
+            if 'root' not in data: data['root'] = []
+            if not any(f.get('id') == movie_folder_id for f in data['root']):
+                data['root'].append({"type": "folder", "name": "Filme", "id": movie_folder_id})
+
+        # Arrays für die Zielordner sicherstellen
+        if tv_folder_id not in data: data[tv_folder_id] = []
+        if movie_folder_id not in data: data[movie_folder_id] = []
+
+        count = 0
+        favs = root.findall('favourite')
+        total_favs = len(favs)
+
+        # --- SCHRITT 3: XML durchlaufen und Typ anhand URL zuweisen ---
+        for i, fav in enumerate(favs):
+            name = fav.get('name')
+            thumb = fav.get('thumb')
+            
+            percent = int((i / total_favs) * 100)
+            progress.update(percent, f'Importiere: {name}')
+            
+            if thumb and "/w500/" in thumb:
+                thumb = thumb.replace("/w500/", "/original/")
+                
+            raw_text = fav.text
+            if not raw_text: continue
+                
+            match = re.search(r'"(plugin://.*?)"', raw_text)
+            if not match: continue
+                
+            full_url = match.group(1)
+            
+            # Prüfen ob TV-Show oder Movie im URL-String steht
+            url_lower = full_url.lower()
+            is_tv = 'type=tv' in url_lower or 'tvshow' in url_lower
+            
+            if "&sf_options=" in full_url:
+                base_url, sf_options_encoded = full_url.split("&sf_options=", 1)
+            else:
+                base_url = full_url
+                sf_options_encoded = ""
+
+            plot = ""
+            year = ""
+            rating = ""
+            genre = ""
+            
+            if sf_options_encoded:
+                sf_options_decoded = unquote(sf_options_encoded)
+                sf_dict = parse_qs(sf_options_decoded)
+                
+                if 'desc' in sf_dict: plot = sf_dict['desc'][0]
+                if 'meta' in sf_dict:
+                    meta_decoded = unquote(sf_dict['meta'][0])
+                    meta_dict = parse_qs(meta_decoded)
+                    year = meta_dict.get('year', [''])[0]
+                    rating = meta_dict.get('rating', [''])[0]
+                    genre = meta_dict.get('genre', [''])[0]
+                    genre = genre.replace(" + / + ", " / ").replace("+", " ")
+
+            # Zuweisung basierend auf dem erkannten Typ
+            target_folder = tv_folder_id if is_tv else movie_folder_id
+            item_type = "tvshow" if is_tv else "item"
+            mediatype = "tvshow" if is_tv else "movie"
+
+            new_entry = {
+                "type": item_type,
+                "name": name,
+                "url": base_url,
+                "art": {"poster": thumb},
+                "info": {
+                    "title": name,
+                    "plot": plot,
+                    "year": year,
+                    "rating": rating,
+                    "genre": genre,
+                    "mediatype": mediatype,
+                    "imdbnumber": "" 
+                }
+            }
+            
+            data[target_folder].append(new_entry)
+            count += 1
+
+        save_favourites(data)
+        progress.close()
+        xbmcgui.Dialog().notification('Lite Favourites', f'{count} Items intelligent importiert!', xbmcgui.NOTIFICATION_INFO, 3500)
+
+    except Exception as e:
+        if progress: progress.close()
+        xbmcgui.Dialog().ok('Import Fehler', str(e))
+        
 
 def add_favourite(name, url, parent='root', item_type='item', art=None, info=None):
     data = load_favourites()
@@ -1416,6 +1572,12 @@ def router(paramstring):
     elif params.get('mode') == 'clear_cache':
         clear_cache()
         xbmcgui.Dialog().notification('Lite Favourites', 'Cache geleert', xbmcgui.NOTIFICATION_INFO, 2000)
+        xbmc.executebuiltin('Container.Refresh')
+
+    elif params.get('mode') == 'import_sf':
+        import_super_favourites()
+        # Einstellungen schließen, da Kodi sonst manchmal den Refresh blockiert
+        xbmc.executebuiltin('Dialog.Close(settings)')
         xbmc.executebuiltin('Container.Refresh')
 
     elif params.get('mode') == 'update_info':

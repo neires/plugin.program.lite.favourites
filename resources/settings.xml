@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<settings>
+  <category label="Lite Favourites">
+    <!-- Sortierung -->
+    <setting id="sort_method"
+             type="enum"
+             label="Sortierung"
+             values="Name|Jahr|Bewertung"
+             default="0" />
+
+    <setting id="sort_direction"
+             type="enum"
+             label="Sortierreihenfolge"
+             values="Aufsteigend|Absteigend"
+             default="0" />
+
+    <!-- Ansicht (ohne Skin-View-Auslese) -->
+    <setting id="viewmode_movies"
+             type="number"
+             label="View-ID Filme (0 = nicht setzen)"
+             default="517" />
+
+    <setting id="viewmode_tvshows"
+             type="number"
+             label="View-ID Serien (0 = nicht setzen)"
+             default="517" />
+  </category>
+
+  <category label="Dropbox Sync">
+    <setting id="dropbox_app_key"
+             type="text"
+             label="Dropbox App Key"
+             default=""
+             visible="true" />
+    
+    <setting id="dropbox_app_secret"
+             type="text"
+             label="Dropbox App Secret"
+             default=""
+             visible="true" />
+    
+    <setting id="dropbox_refresh_token"
+             type="text"
+             label="Dropbox Refresh Token"
+             default=""
+             visible="true" />
+    
+    <setting id="dropbox_folder"
+             type="text"
+             label="Dropbox Ordner (der App folder name)"
+             default=""
+             visible="true" />
+    
+    <setting id="sync_interval"
+             type="number"
+             label="Sync-Intervall (Minuten, 0 = deaktiviert)"
+             default="60"
+             visible="true" />
+    
+    <setting id="last_sync_time"
+             type="text"
+             label="Letzte Synchronisierung"
+             default="Nie"
+             visible="false" />
+    
+    <setting id="sync_now"
+             type="action"
+             label="Jetzt synchronisieren"
+             action="RunPlugin(plugin://plugin.program.lite.favourites/?mode=sync_now)"
+             visible="true" />
+    
+    <setting id="sync_status"
+             type="text"
+             label="Sync-Status"
+             default="Bereit"
+             visible="true" />
+  </category>
+</settings>

@@ -1018,7 +1018,7 @@ def list_directory(folder_id='root', focus_item=None):
         # --- NEU: SYSTEM-BUTTONS IM ROOT MENÜ ---
         if folder_id == 'root':
             # 1. Suchen-Button
-            li_search = xbmcgui.ListItem('[B][🔍] Suchen...[/B]')
+            li_search = xbmcgui.ListItem('Suchen...')
             search_icon = 'DefaultAddonsSearch.png'
             li_search.setArt({'icon': search_icon, 'thumb': search_icon, 'poster': search_icon})
             li_search.setProperty('IsPlayable', 'false')
@@ -1026,7 +1026,7 @@ def list_directory(folder_id='root', focus_item=None):
             xbmcplugin.addDirectoryItem(handle, search_url, li_search, isFolder=True)
             
             # 2. Dropbox-Sync-Button
-            li_sync = xbmcgui.ListItem('[B][🔄] Sync mit Dropbox[/B]')
+            li_sync = xbmcgui.ListItem('Sync mit Dropbox')
             sync_icon = 'DefaultAddonService.png'
             li_sync.setArt({'icon': sync_icon, 'thumb': sync_icon, 'poster': sync_icon})
             li_sync.setProperty('IsPlayable', 'false')
@@ -1034,7 +1034,7 @@ def list_directory(folder_id='root', focus_item=None):
             xbmcplugin.addDirectoryItem(handle, sync_url, li_sync, isFolder=False)
             
             # 3. Einstellungen-Button
-            li_settings = xbmcgui.ListItem('[B][⚙️] Einstellungen[/B]')
+            li_settings = xbmcgui.ListItem('Einstellungen')
             settings_icon = 'DefaultAddonProgram.png'
             li_settings.setArt({'icon': settings_icon, 'thumb': settings_icon, 'poster': settings_icon})
             li_settings.setProperty('IsPlayable', 'false')

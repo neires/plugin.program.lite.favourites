@@ -964,7 +964,7 @@ def search_items():
             xbmcplugin.addDirectoryItem(handle, retry_url, li_retry, isFolder=True)
             
             # 2. Dummy: Suche mit TMDb Helper
-            li_tmdb = xbmcgui.ListItem(f'[B][🔍] "{query}" mit TMDb Helper suchen...[/B]')
+            li_tmdb = xbmcgui.ListItem(f'[B]"{query}" mit TMDb Helper suchen...[/B]')
             tmdb_icon = 'DefaultVideo.png'
             li_tmdb.setArt({'icon': tmdb_icon, 'thumb': tmdb_icon, 'poster': tmdb_icon})
             li_tmdb.setProperty('IsPlayable', 'false')

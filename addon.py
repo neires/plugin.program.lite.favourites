@@ -3,6 +3,7 @@
 # edit 2026-05-13 add Neuer Ordner in dialog.select
 # edit 2026-05-14 add import dialog - Alte Super Favourites XML
 # edit 2026-05-14 add DUPLIKATS-CHECK für Import  Super Favourites
+# edit 2026-05-21 add root Einstellungen, Sync-Dropbox, Globale Suche mit Turbo-Fokus & TMDb-Fallback
 import sys
 import os
 import json
@@ -148,8 +149,7 @@ def _goto_lite_folder(folder_id, target_name=None):
         query['focus_item'] = target_name
     url = build_url(query)
     xbmc.executebuiltin(f'Container.Update("{url}")')
-    
-        
+
 def load_favourites():
     global _favourites_cache, _cache_timestamp
     import time
@@ -242,7 +242,6 @@ def add_folder(folder_name, parent='root'):
         data[folder_id] = []
     save_favourites(data)
     xbmcgui.Dialog().notification('Lite Favourites', 'Ordner erstellt: ' + folder_name, xbmcgui.NOTIFICATION_INFO, 2000)
-
 
 def import_super_favourites():
     # Definiere den Standardpfad zu Super Favourites
@@ -403,7 +402,6 @@ def import_super_favourites():
         if progress: progress.close()
         xbmcgui.Dialog().ok('Import Fehler', str(e))
         
-
 def add_favourite(name, url, parent='root', item_type='item', art=None, info=None):
     data = load_favourites()
     if parent not in data:
@@ -898,176 +896,261 @@ def detect_fav_type_from_context(list_item):
         pass
     return 'item'
 
+def search_items():
+        handle = int(sys.argv[1])
+        
+        kb = xbmc.Keyboard('', 'Suchbegriff eingeben')
+        kb.doModal()
+        
+        if not kb.isConfirmed() or not kb.getText().strip():
+            xbmcplugin.endOfDirectory(handle, updateListing=False, cacheToDisc=False)
+            return
+            
+        query = kb.getText().strip().lower()
+        
+        xbmcplugin.setContent(handle, 'files')
+        xbmcplugin.setPluginCategory(handle, f'Suche: {query}')
+        xbmcplugin.addSortMethod(handle, xbmcplugin.SORT_METHOD_UNSORTED)
+        
+        data = load_favourites()
+        match_count = 0
+        
+        try:
+            from urllib.parse import quote
+        except ImportError:
+            from urllib import quote
+            
+        for folder_id, items in data.items():
+            if not isinstance(items, list): 
+                continue
+                
+            for item in items:
+                name = item.get('name', '')
+                if query in name.lower():
+                    match_count += 1
+                    display_folder = _folder_display_name(folder_id)
+                    item_type = item.get('type', 'item')
+                    
+                    if item_type == 'folder':
+                        type_str = "Ordner"
+                    elif item_type == 'tvshow':
+                        type_str = "Serie"
+                    else:
+                        type_str = "Film"
+                        
+                    li = xbmcgui.ListItem(f"{name} [COLOR gray]({type_str} in: {display_folder})[/COLOR]")
+                    
+                    if 'art' in item and item['art']:
+                        li.setArt(clean_artwork(item['art']))
+                        
+                    safe_focus = quote(name)
+                    target_url = build_url({
+                        'mode': 'search_goto',
+                        'folder': folder_id,
+                        'focus_item': safe_focus
+                    })
+                    
+                    xbmcplugin.addDirectoryItem(handle, target_url, li, isFolder=False)
+                    
+        # --- NEU: WENN NICHTS GEFUNDEN WURDE ---
+        if match_count == 0:
+            # 1. Erneut suchen Button
+            li_retry = xbmcgui.ListItem('[I]Keine Treffer gefunden - Erneut suchen...[/I]')
+            search_icon = 'DefaultAddonsSearch.png'
+            li_retry.setArt({'icon': search_icon, 'thumb': search_icon, 'poster': search_icon})
+            li_retry.setProperty('IsPlayable', 'false')
+            retry_url = build_url({'mode': 'search'})
+            # isFolder=True ruft die Suche quasi als neuen Ordner auf
+            xbmcplugin.addDirectoryItem(handle, retry_url, li_retry, isFolder=True)
+            
+            # 2. Dummy: Suche mit TMDb Helper
+            li_tmdb = xbmcgui.ListItem(f'[B][🔍] "{query}" mit TMDb Helper suchen...[/B]')
+            tmdb_icon = 'DefaultVideo.png'
+            li_tmdb.setArt({'icon': tmdb_icon, 'thumb': tmdb_icon, 'poster': tmdb_icon})
+            li_tmdb.setProperty('IsPlayable', 'false')
+            dummy_url = build_url({'mode': 'search_tmdb_dummy', 'query': query})
+            # isFolder=False, da dies eine Aktion im Router auslöst
+            xbmcplugin.addDirectoryItem(handle, dummy_url, li_tmdb, isFolder=False)
+            
+        xbmcplugin.endOfDirectory(handle, updateListing=False, cacheToDisc=False)
+
 def list_directory(folder_id='root', focus_item=None):
-    handle = int(sys.argv[1])
-    data = load_favourites()
-
-    # Wir bereiten zwei Listen vor, um genau nachzuvollziehen, was wir Kodi übergeben
-    folder_items = []
-    media_items = []
-
-    if folder_id in data:
-        for item in data[folder_id]:
-            t = item.get('type')
-            if t == 'folder':
-                folder_items.append(item)
-            else:
-                media_items.append(item)
-
-    # Content-Type bestimmen
-    if len(media_items) > 0:
-        has_tvshows = any(i.get('type') == 'tvshow' for i in media_items)
-        has_movies = any(i.get('type') == 'item' for i in media_items)
-        if has_tvshows and not has_movies:
-            content_type = 'tvshows'
-        elif has_movies and not has_tvshows:
-            content_type = 'movies'
-        else:
-            content_type = 'movies'
-    else:
-        fid = (folder_id or '')
-        if fid == 'Serien' or fid.startswith('Serien/'):
-            content_type = 'tvshows'
-        elif fid == 'Filme' or fid.startswith('Filme/'):
-            content_type = 'movies'
-        else:
-            content_type = 'movies'
-
-    xbmcplugin.setContent(handle, content_type)
-    xbmcplugin.setPluginCategory(handle, 'Lite Favourites')
-
-    # WICHTIG: Wir sagen Kodi, es soll unsortiert laden, damit UNSERE Sortierung gilt!
-    xbmcplugin.addSortMethod(handle, xbmcplugin.SORT_METHOD_UNSORTED)
-
-    # Wir sortieren die Ordner alphabetisch (wie Kodi es auch tun würde)
-    folder_items.sort(key=lambda x: str(x.get('name')).lower())
-    
-    # Wir sortieren die Medien alphabetisch (ignoriert Artikel wie The, A, Der, Die nicht,
-    # aber garantiert, dass der Index, den wir berechnen, zu 100% mit der Liste übereinstimmt)
-    media_items.sort(key=lambda x: str(x.get('name')).lower())
-
-    # Zusammenfügen: Ordner zuerst, dann Medien
-    final_list = folder_items + media_items
-    # --- FIX FÜR LEERE ORDNER / ERSTEN START ---
-    if len(final_list) == 0:
-        li = xbmcgui.ListItem('[B][+] Ersten Ordner erstellen[/B]')
-        # Standard Kodi-Icon für das Hinzufügen von Quellen/Ordnern
-        li.setArt({'icon': 'DefaultAddSource.png'})
-        li.setProperty('IsPlayable', 'false')
+        handle = int(sys.argv[1])
+        data = load_favourites()
         
-        # Die URL führt direkt zu deiner add_folder Logik
-        add_folder_url = build_url({'mode': 'add_folder', 'parent': folder_id})
+        folder_items = []
+        media_items = []
         
-        # isFolder=False sorgt dafür, dass das Skript einfach ausgeführt wird (Tastatur öffnet sich)
-        xbmcplugin.addDirectoryItem(handle, add_folder_url, li, isFolder=False)
-    # -------------------------------------------
-    # Items an Kodi übergeben
-    for idx, item in enumerate(final_list):
-        if item.get('type') == 'folder':
-            url = build_url({'mode': 'browse', 'folder': item['id']})
-            li = xbmcgui.ListItem(item['name'])
-            if xbmcvfs.exists(ICON_PATH):
-                li.setArt({'icon': ICON_PATH})
+        if folder_id in data:
+            for item in data[folder_id]:
+                t = item.get('type')
+                if t == 'folder':
+                    folder_items.append(item)
+                else:
+                    media_items.append(item)
+                    
+        if len(media_items) > 0:
+            has_tvshows = any(i.get('type') == 'tvshow' for i in media_items)
+            has_movies = any(i.get('type') == 'item' for i in media_items)
+            if has_tvshows and not has_movies:
+                content_type = 'tvshows'
+            elif has_movies and not has_tvshows:
+                content_type = 'movies'
             else:
-                li.setArt({'icon': 'DefaultFolder.png'})
-
-            add_folder_in_url = build_url({'mode': 'add_folder', 'parent': item['id']})
-            add_folder_here_url = build_url({'mode': 'add_folder', 'parent': folder_id})
-            remove_url = build_url({'mode': 'remove', 'parent': folder_id, 'index': str(data[folder_id].index(item))})
-            move_url = build_url({'mode': 'select_target_folder', 'source_parent': folder_id, 'source_index': str(data[folder_id].index(item))})
-
-            context_menu = [
-               #('Info aktualisieren', 'RunPlugin(' + update_info_url + ')'),
-                ('Ordner hier hinzufügen', 'RunPlugin(' + add_folder_here_url + ')'),
-                ('In Ordner verschieben', 'RunPlugin(' + move_url + ')'),
-                ('Löschen', 'RunPlugin(' + remove_url + ')'),
-                ('Sync mit Dropbox', 'RunPlugin(' + build_url({'mode': 'sync_now'}) + ')')
-            ]
-            li.addContextMenuItems(context_menu)
-            xbmcplugin.addDirectoryItem(handle, url, li, isFolder=True)
-
+                content_type = 'movies'
         else:
-            li = xbmcgui.ListItem(item['name'])
-            if 'art' in item and item['art']:
-                li.setArt(clean_artwork(item['art']))
-
-            info_dict = {
-                'mediatype': 'tvshow' if item.get('type') == 'tvshow' else 'movie',
-                'title': item['name']
-            }
-            if item.get('type') == 'tvshow':
-                info_dict['tvshowtitle'] = item['name']
-
-            if 'info' in item and item['info']:
-                for key, value in item['info'].items():
-                    if value:
-                        info_dict[key] = value
-            li.setInfo('video', info_dict)
+            fid = (folder_id or '')
+            if fid == 'Serien' or fid.startswith('Serien/'):
+                content_type = 'tvshows'
+            elif fid == 'Filme' or fid.startswith('Filme/'):
+                content_type = 'movies'
+            else:
+                content_type = 'movies'
+                
+        xbmcplugin.setContent(handle, content_type)
+        xbmcplugin.setPluginCategory(handle, 'Lite Favourites')
+        xbmcplugin.addSortMethod(handle, xbmcplugin.SORT_METHOD_UNSORTED)
+        
+        folder_items.sort(key=lambda x: str(x.get('name')).lower())
+        media_items.sort(key=lambda x: str(x.get('name')).lower())
+        final_list = folder_items + media_items
+        
+        # --- NEU: SYSTEM-BUTTONS IM ROOT MENÜ ---
+        if folder_id == 'root':
+            # 1. Suchen-Button
+            li_search = xbmcgui.ListItem('[B][🔍] Suchen...[/B]')
+            search_icon = 'DefaultAddonsSearch.png'
+            li_search.setArt({'icon': search_icon, 'thumb': search_icon, 'poster': search_icon})
+            li_search.setProperty('IsPlayable', 'false')
+            search_url = build_url({'mode': 'search'})
+            xbmcplugin.addDirectoryItem(handle, search_url, li_search, isFolder=True)
+            
+            # 2. Dropbox-Sync-Button
+            li_sync = xbmcgui.ListItem('[B][🔄] Sync mit Dropbox[/B]')
+            sync_icon = 'DefaultAddonService.png'
+            li_sync.setArt({'icon': sync_icon, 'thumb': sync_icon, 'poster': sync_icon})
+            li_sync.setProperty('IsPlayable', 'false')
+            sync_url = build_url({'mode': 'sync_now'})
+            xbmcplugin.addDirectoryItem(handle, sync_url, li_sync, isFolder=False)
+            
+            # 3. Einstellungen-Button
+            li_settings = xbmcgui.ListItem('[B][⚙️] Einstellungen[/B]')
+            settings_icon = 'DefaultAddonProgram.png'
+            li_settings.setArt({'icon': settings_icon, 'thumb': settings_icon, 'poster': settings_icon})
+            li_settings.setProperty('IsPlayable', 'false')
+            settings_url = build_url({'mode': 'open_settings'})
+            xbmcplugin.addDirectoryItem(handle, settings_url, li_settings, isFolder=False)
+            
+        if len(final_list) == 0:
+            li = xbmcgui.ListItem('[B][+] Ersten Ordner erstellen[/B]')
+            li.setArt({'icon': 'DefaultAddSource.png'})
             li.setProperty('IsPlayable', 'false')
-
-            add_folder_here_url = build_url({'mode': 'add_folder', 'parent': folder_id})
-            remove_url = build_url({'mode': 'remove', 'parent': folder_id, 'index': str(data[folder_id].index(item))})
-            update_info_url = build_url({'mode': 'update_info', 'parent': folder_id, 'index': str(data[folder_id].index(item))})
-            move_url = build_url({'mode': 'select_target_folder', 'source_parent': folder_id, 'source_index': str(data[folder_id].index(item))})
-
-            context_menu = [
-                ('Info aktualisieren', 'RunPlugin(' + update_info_url + ')'),
-                ('Ordner hier hinzufügen', 'RunPlugin(' + add_folder_here_url + ')'),
-                ('In Ordner verschieben', 'RunPlugin(' + move_url + ')'),
-                ('Löschen', 'RunPlugin(' + remove_url + ')'),
-                ('Sync mit Dropbox', 'RunPlugin(' + build_url({'mode': 'sync_now'}) + ')')
-            ]
-            li.addContextMenuItems(context_menu)
+            add_folder_url = build_url({'mode': 'add_folder', 'parent': folder_id})
+            xbmcplugin.addDirectoryItem(handle, add_folder_url, li, isFolder=False)
             
-            final_url = get_tvshow_episodes(item['url']) if item.get('type') == 'tvshow' else item['url']
-            final_url = final_url if final_url else item['url']
-            
-            xbmcplugin.addDirectoryItem(handle, final_url, li, isFolder=(item.get('type') == 'tvshow'))
-
-    xbmcplugin.endOfDirectory(handle, updateListing=False, cacheToDisc=True)
-
-    # --- FOKUS LOGIK (Der Turbo-Bot im Thread) ---
-    if focus_item:
-        target_pos = -1
-        # Wir suchen die Position in der sortierten JSON-Liste
         for idx, item in enumerate(final_list):
-            if item.get('name') == focus_item:
-                target_pos = idx
-                break
+            if item.get('type') == 'folder':
+                url = build_url({'mode': 'browse', 'folder': item['id']})
+                li = xbmcgui.ListItem(item['name'])
+                if xbmcvfs.exists(ICON_PATH):
+                    li.setArt({'icon': ICON_PATH})
+                else:
+                    li.setArt({'icon': 'DefaultFolder.png'})
+                    
+                add_folder_here_url = build_url({'mode': 'add_folder', 'parent': folder_id})
+                remove_url = build_url({'mode': 'remove', 'parent': folder_id, 'index': str(data[folder_id].index(item))})
+                move_url = build_url({'mode': 'select_target_folder', 'source_parent': folder_id, 'source_index': str(data[folder_id].index(item))})
                 
-        if target_pos != -1:
-            xbmc.log(f"LITE-FAV: Starte Turbo-Bot fuer '{focus_item}' an Index {target_pos}...", xbmc.LOGWARNING)
+                context_menu = [
+                    ('Ordner hier hinzufügen', 'RunPlugin(' + add_folder_here_url + ')'),
+                    ('In Ordner verschieben', 'RunPlugin(' + move_url + ')'),
+                    ('Löschen', 'RunPlugin(' + remove_url + ')'),
+                    ('Sync mit Dropbox', 'RunPlugin(' + build_url({'mode': 'sync_now'}) + ')')
+                ]
+                li.addContextMenuItems(context_menu)
+                xbmcplugin.addDirectoryItem(handle, url, li, isFolder=True)
+                
+            else:
+                li = xbmcgui.ListItem(item['name'])
+                if 'art' in item and item['art']:
+                    li.setArt(clean_artwork(item['art']))
+                    
+                info_dict = {
+                    'mediatype': 'tvshow' if item.get('type') == 'tvshow' else 'movie',
+                    'title': item['name']
+                }
+                if item.get('type') == 'tvshow':
+                    info_dict['tvshowtitle'] = item['name']
+                    
+                if 'info' in item and item['info']:
+                    for key, value in item['info'].items():
+                        if value:
+                            info_dict[key] = value
+                li.setInfo('video', info_dict)
+                li.setProperty('IsPlayable', 'false')
+                
+                add_folder_here_url = build_url({'mode': 'add_folder', 'parent': folder_id})
+                remove_url = build_url({'mode': 'remove', 'parent': folder_id, 'index': str(data[folder_id].index(item))})
+                update_info_url = build_url({'mode': 'update_info', 'parent': folder_id, 'index': str(data[folder_id].index(item))})
+                move_url = build_url({'mode': 'select_target_folder', 'source_parent': folder_id, 'source_index': str(data[folder_id].index(item))})
+                
+                context_menu = [
+                    ('Info aktualisieren', 'RunPlugin(' + update_info_url + ')'),
+                    ('Ordner hier hinzufügen', 'RunPlugin(' + add_folder_here_url + ')'),
+                    ('In Ordner verschieben', 'RunPlugin(' + move_url + ')'),
+                    ('Löschen', 'RunPlugin(' + remove_url + ')'),
+                    ('Sync mit Dropbox', 'RunPlugin(' + build_url({'mode': 'sync_now'}) + ')')
+                ]
+                li.addContextMenuItems(context_menu)
+                
+                final_url = get_tvshow_episodes(item['url']) if item.get('type') == 'tvshow' else item['url']
+                final_url = final_url if final_url else item['url']
+                
+                xbmcplugin.addDirectoryItem(handle, final_url, li, isFolder=(item.get('type') == 'tvshow'))
+                
+        xbmcplugin.endOfDirectory(handle, updateListing=False, cacheToDisc=True)
+        
+        if focus_item:
+            target_pos = -1
+            offset = 0
             
-            def turbo_focus_task():
-                # 1. Wir warten 1.5 Sekunden, damit Kodi die Poster lädt
-                xbmc.sleep(500)
+            # Offset-Korrektur: Wenn wir im Root sind, addieren wir die 3 System-Buttons oben drauf!
+            if folder_id == 'root':
+                offset += 3
+            if len(final_list) == 0:
+                offset += 1
                 
-                # Berechnung für ein 9-Spalten Grid
-                ITEMS_PER_ROW = 9
-                rows_down = target_pos // ITEMS_PER_ROW
-                steps_right = target_pos % ITEMS_PER_ROW
-                
-                # 2. Reset an den Anfang
-                xbmc.executebuiltin('Action(FirstPage)')
-                xbmc.sleep(50) 
-                xbmc.executebuiltin('Action(FirstPage)')
-                xbmc.sleep(100) # Kurz warten, bis er oben einrastet
-                
-                # 3. Turbo-Scroll nach unten
-                for _ in range(rows_down):
-                    xbmc.executebuiltin('Action(Down)')
-                    xbmc.sleep(10)
+            for idx, item in enumerate(final_list):
+                if item.get('name') == focus_item:
+                    target_pos = idx + offset
+                    break
                     
-                # 4. Turbo-Scroll nach rechts
-                for _ in range(steps_right):
-                    xbmc.executebuiltin('Action(Right)')
-                    xbmc.sleep(10)
+            if target_pos != -1:
+                xbmc.log(f"LITE-FAV: Starte Turbo-Bot fuer '{focus_item}' an Index {target_pos}...", xbmc.LOGWARNING)
+                
+                def turbo_focus_task():
+                    xbmc.sleep(500)
+                    ITEMS_PER_ROW = 9
+                    rows_down = target_pos // ITEMS_PER_ROW
+                    steps_right = target_pos % ITEMS_PER_ROW
                     
-                xbmc.log(f"LITE-FAV: Turbo-Bot hat Ziel '{focus_item}' erreicht!", xbmc.LOGWARNING)
-
-            # WICHTIG: KEIN Daemon-Thread! Der Thread hält das Skript am Leben, bis der Bot fertig ist.
-            t = threading.Thread(target=turbo_focus_task)
-            t.start()
+                    xbmc.executebuiltin('Action(FirstPage)')
+                    xbmc.sleep(50) 
+                    xbmc.executebuiltin('Action(FirstPage)')
+                    xbmc.sleep(100)
+                    
+                    for _ in range(rows_down):
+                        xbmc.executebuiltin('Action(Down)')
+                        xbmc.sleep(10)
+                        
+                    for _ in range(steps_right):
+                        xbmc.executebuiltin('Action(Right)')
+                        xbmc.sleep(10)
+                        
+                    xbmc.log(f"LITE-FAV: Turbo-Bot hat Ziel '{focus_item}' erreicht!", xbmc.LOGWARNING)
+                    
+                t = threading.Thread(target=turbo_focus_task)
+                t.start()
 
 def add_to_favourites_from_context():
     xbmc.sleep(200)
@@ -1530,137 +1613,165 @@ def schedule_sync():
     sync_with_dropbox()
 
 def router(paramstring):
-    params = dict(parse_qsl(paramstring))
-
-    if not params:
-        access_token = ADDON.getSetting('dropbox_access_token')
-        if access_token and int(ADDON.getSetting('sync_interval')) > 0:
-            schedule_sync()
-        list_directory()
-
-    elif params.get('mode') == 'browse':
-        # Holt den übergebenen Fokus-Namen (falls vorhanden) und entschlüsselt ihn
-        focus_target = params.get('focus_item')
-        if focus_target:
-            import urllib.parse
-            focus_target = urllib.parse.unquote(focus_target)
-            
-        list_directory(params.get('folder', 'root'), focus_target)
-
-    elif params.get('mode') == 'add_folder':
-        kb = xbmc.Keyboard('', 'Ordnername eingeben')
-        kb.doModal()
-        if kb.isConfirmed():
-            name = kb.getText()
-            if name:
-                add_folder(name, params.get('parent', 'root'))
-                xbmc.executebuiltin('Container.Refresh')
-
-    elif params.get('mode') == 'add_fav':
-        kb = xbmc.Keyboard('', 'Favoriten-Name eingeben')
-        kb.doModal()
-        if kb.isConfirmed():
-            name = kb.getText()
-            if name:
-                kb2 = xbmc.Keyboard('', 'URL/Pfad eingeben (z.B. plugin://...)')
-                kb2.doModal()
-                if kb2.isConfirmed():
-                    url = kb2.getText()
-                    if url:
-                        add_favourite(name, url, params.get('parent', 'root'))
-                        xbmc.executebuiltin('Container.Refresh')
-
-    elif params.get('mode') == 'add_from_context':
-        add_to_favourites_from_context()
-
-    elif params.get('mode') == 'remove':
-        dialog = xbmcgui.Dialog()
-        if dialog.yesno('Bestätigung', 'Wirklich löschen?'):
-            remove_item(params.get('parent', 'root'), int(params.get('index', 0)))
-            xbmc.executebuiltin('Container.Refresh')
-
-    elif params.get('mode') == 'clear_cache':
-        clear_cache()
-        xbmcgui.Dialog().notification('Lite Favourites', 'Cache geleert', xbmcgui.NOTIFICATION_INFO, 2000)
-        xbmc.executebuiltin('Container.Refresh')
-
-    elif params.get('mode') == 'import_sf':
-        import_super_favourites()
-        # Einstellungen schließen, da Kodi sonst manchmal den Refresh blockiert
-        xbmc.executebuiltin('Dialog.Close(settings)')
-        xbmc.executebuiltin('Container.Refresh')
-
-    elif params.get('mode') == 'update_info':
-        update_item_info(params.get('parent', 'root'), int(params.get('index', 0)))
-
-    elif params.get('mode') == 'select_target_folder':
-        data = load_favourites()
-        source_parent = params.get('source_parent', 'root')
-        source_index = int(params.get('source_index', 0))
-
-        if source_parent not in data or source_index >= len(data[source_parent]):
-            return
-
-        item = data[source_parent][source_index]
-        item_type = item.get('type')
-
-        folders = get_all_folders(data)
-
-        allowed_root = None
-        if item_type == 'tvshow':
-            allowed_root = 'Serien'
-        elif item_type == 'item':
-            allowed_root = 'Filme'
-
-        if allowed_root:
-            folders = [
-                (folder_name, folder_id)
-                for (folder_name, folder_id) in folders
-                if folder_id != 'root' and (folder_id == allowed_root or folder_id.startswith(allowed_root + '/'))
-            ]
-
-            if not folders:
-                xbmcgui.Dialog().notification(
-                    'Lite Favourites',
-                    f'Keine Zielordner unter "{allowed_root}"',
-                    xbmcgui.NOTIFICATION_WARNING,
-                    2500
-                )
-                return
-
-        if item_type == 'folder':
-            folder_self_id = item.get('id', '')
-            filtered_folders = []
-            for folder_name, folder_id in folders:
-                if folder_id != folder_self_id and not folder_id.startswith(folder_self_id + '/'):
-                    filtered_folders.append((folder_name, folder_id))
-            folders = filtered_folders
-
-        folder_names = [f[0] for f in folders]
-        dialog = xbmcgui.Dialog()
-
-        selected = dialog.select('Zielordner auswählen', folder_names)
-        if selected >= 0:
-            target_parent = folders[selected][1]
-            if move_item(source_parent, source_index, target_parent):
-                xbmc.executebuiltin('Container.Refresh')
-
-    elif params.get('mode') == 'sync_now':
-        xbmcgui.Dialog().notification('Lite Favourites', 'Synchronisation wird gestartet...', xbmcgui.NOTIFICATION_INFO, 2000)
-        sync_with_dropbox()
-        xbmc.executebuiltin('Container.Refresh')
-
-    elif params.get('mode') == 'browse':
-        # Holt den übergebenen Fokus-Namen (falls vorhanden)
-        focus_target = params.get('focus_item')
+        params = dict(parse_qsl(paramstring))
         
-        if focus_target:
-            import urllib.parse
-            # Wichtig: wieder ent-coden, da wir es in der URL sicher verpackt hatten
-            focus_target = urllib.parse.unquote(focus_target)
+        if not params:
+            access_token = ADDON.getSetting('dropbox_access_token')
+            if access_token and int(ADDON.getSetting('sync_interval')) > 0:
+                schedule_sync()
+            list_directory()
             
-        # Übergibt den Ordner und das Ziel-Item an die Listen-Funktion
-        list_directory(params.get('folder', 'root'), focus_target)
-
+        elif params.get('mode') == 'browse':
+            focus_target = params.get('focus_item')
+            if focus_target:
+                import urllib.parse
+                focus_target = urllib.parse.unquote(focus_target)
+            list_directory(params.get('folder', 'root'), focus_target)
+            
+        elif params.get('mode') == 'add_folder':
+            kb = xbmc.Keyboard('', 'Ordnername eingeben')
+            kb.doModal()
+            if kb.isConfirmed():
+                name = kb.getText()
+                if name:
+                    add_folder(name, params.get('parent', 'root'))
+                    xbmc.executebuiltin('Container.Refresh')
+                    
+        elif params.get('mode') == 'add_fav':
+            kb = xbmc.Keyboard('', 'Favoriten-Name eingeben')
+            kb.doModal()
+            if kb.isConfirmed():
+                name = kb.getText()
+                if name:
+                    kb2 = xbmc.Keyboard('', 'URL/Pfad eingeben (z.B. plugin://...)')
+                    kb2.doModal()
+                    if kb2.isConfirmed():
+                        url = kb2.getText()
+                        if url:
+                            add_favourite(name, url, params.get('parent', 'root'))
+                            xbmc.executebuiltin('Container.Refresh')
+                            
+        elif params.get('mode') == 'add_from_context':
+            add_to_favourites_from_context()
+            
+        elif params.get('mode') == 'remove':
+            dialog = xbmcgui.Dialog()
+            if dialog.yesno('Bestätigung', 'Wirklich löschen?'):
+                remove_item(params.get('parent', 'root'), int(params.get('index', 0)))
+                xbmc.executebuiltin('Container.Refresh')
+                
+        elif params.get('mode') == 'clear_cache':
+            clear_cache()
+            xbmcgui.Dialog().notification('Lite Favourites', 'Cache geleert', xbmcgui.NOTIFICATION_INFO, 2000)
+            xbmc.executebuiltin('Container.Refresh')
+            
+        elif params.get('mode') == 'update_info':
+            update_item_info(params.get('parent', 'root'), int(params.get('index', 0)))
+            
+        elif params.get('mode') == 'select_target_folder':
+            data = load_favourites()
+            source_parent = params.get('source_parent', 'root')
+            source_index = int(params.get('source_index', 0))
+            
+            if source_parent not in data or source_index >= len(data[source_parent]):
+                return
+                
+            item = data[source_parent][source_index]
+            item_type = item.get('type')
+            folders = get_all_folders(data)
+            allowed_root = None
+            
+            if item_type == 'tvshow':
+                allowed_root = 'Serien'
+            elif item_type == 'item':
+                allowed_root = 'Filme'
+                
+            if allowed_root:
+                folders = [
+                    (folder_name, folder_id)
+                    for (folder_name, folder_id) in folders
+                    if folder_id != 'root' and (folder_id == allowed_root or folder_id.startswith(allowed_root + '/'))
+                ]
+                if not folders:
+                    xbmcgui.Dialog().notification(
+                        'Lite Favourites',
+                        f'Keine Zielordner unter "{allowed_root}"',
+                        xbmcgui.NOTIFICATION_WARNING,
+                        2500
+                    )
+                    return
+                    
+            if item_type == 'folder':
+                folder_self_id = item.get('id', '')
+                filtered_folders = []
+                for folder_name, folder_id in folders:
+                    if folder_id != folder_self_id and not folder_id.startswith(folder_self_id + '/'):
+                        filtered_folders.append((folder_name, folder_id))
+                folders = filtered_folders
+                
+            folder_names = [f[0] for f in folders]
+            dialog = xbmcgui.Dialog()
+            selected = dialog.select('Zielordner auswählen', folder_names)
+            
+            if selected >= 0:
+                target_parent = folders[selected][1]
+                if move_item(source_parent, source_index, target_parent):
+                    xbmc.executebuiltin('Container.Refresh')
+                    
+        elif params.get('mode') == 'sync_now':
+            xbmcgui.Dialog().notification('Lite Favourites', 'Synchronisation wird gestartet...', xbmcgui.NOTIFICATION_INFO, 2000)
+            sync_with_dropbox()
+            xbmc.executebuiltin('Container.Refresh')
+            
+        elif params.get('mode') == 'import_sf':
+            import_super_favourites()
+            xbmc.executebuiltin('Dialog.Close(settings)')
+            xbmc.executebuiltin('Container.Refresh')
+            
+        elif params.get('mode') == 'search':
+            search_items()
+            
+        elif params.get('mode') == 'search_goto':
+            folder = params.get('folder', 'root')
+            focus_target = params.get('focus_item', '')
+            
+            query = {'mode': 'browse', 'folder': folder}
+            if focus_target:
+                query['focus_item'] = focus_target
+                
+            url = build_url(query)
+            xbmc.executebuiltin(f'Container.Update("{url}",replace)')
+            
+        elif params.get('mode') == 'open_settings':
+            xbmc.executebuiltin(f'Addon.OpenSettings({ADDON_ID})')
+            
+        # --- NEU: DER DUMMY FÜR DEN TMDB HELPER ---
+        elif params.get('mode') == 'search_tmdb_dummy':
+            query = params.get('query', '')
+            
+            try:
+                from urllib.parse import quote
+            except ImportError:
+                from urllib import quote
+                
+            safe_query = quote(query)
+            
+            # TMDb Helper braucht zwingend den Typ. Wir lassen den User kurz wählen:
+            dialog = xbmcgui.Dialog()
+            ret = dialog.select('TMDb Helper Suche: Was suchst du?', ['Filme', 'Serien'])
+            
+            if ret == 0:
+                search_type = 'movie'
+            elif ret == 1:
+                search_type = 'tv'
+            else:
+                return # User hat abgebrochen
+                
+            # Die fertige, fehlerfreie URL für den TMDb Helper
+            tmdb_url = f"plugin://plugin.video.themoviedb.helper/?info=search&type={search_type}&query={safe_query}"
+            
+            # Suchergebnis-Ansicht öffnen
+            xbmc.executebuiltin(f'Container.Update("{tmdb_url}")')
+            
 if __name__ == '__main__':
     router(sys.argv[2][1:])

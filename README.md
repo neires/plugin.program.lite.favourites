@@ -32,7 +32,13 @@ Funktioniert mit Kodi 19 (Matrix), Kodi 20 (Nexus), Kodi 21 (Omega) und Kodi 22 
 * **Kontextmenü-Integration:** Füge Inhalte direkt aus anderen Addons während des Browsens zu deinen Lite Favourites hinzu.
 * **Turbo-Focus-Scroll:** Eine spezielle Threading-Logik sorgt dafür, dass nach dem Wechsel in einen Ordner das zuletzt gewählte Item automatisch fokussiert und "angescrollt" wird (optimiert für Grid-Ansichten, z. B. 9 Spalten).
 * **Dynamische Ansicht:** Das Addon erkennt den Inhaltstyp (Movies vs. TV Shows), damit Kodi automatisch das passende Layout wählt.
-
+* **Globale Suche mit Turbo-Fokus & TMDb-Fallback:** 
+Durchsuche deine gesamte Favoriten-Datenbank direkt aus dem Hauptmenü. Oder verlinke dir die Suche irgendwo in dein Home-Menü.
+Ein Klick auf einen Suchtreffer springt physisch in den Zielordner und der *Turbo-Bot* scrollt exakt auf das gesuchte Item. 
+Das clevere History-Management sorgt dafür, dass die Zurück-Taste dich danach nahtlos ins Hauptmenü bringt, ohne in der Suche festzuhängen. 
+Findet die lokale Suche mal keinen Treffer, ist das keine Sackgasse: 
+Du kannst den Suchbegriff mit einem Klick direkt an den *TMDb Helper* übergeben (inklusive Filme/Serien-Weiche), um online weiterzusuchen!
+Anschließend kann man, wenn man denn möchte, den Online-Treffer dann zu Lite Favourites hinzufügen.
 ---
 
 ## 🎬 Erste Schritte (Quickstart-Guide)

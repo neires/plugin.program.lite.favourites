@@ -1497,112 +1497,139 @@ def upload_to_dropbox(access_token, dropbox_folder, filename='favourites.json'):
         return False
 
 def sync_with_dropbox():
-    """Hauptfunktion für die Synchronisation mit Dropbox"""
-    dropbox_folder = ADDON.getSetting('dropbox_folder')
-    
-    if not dropbox_folder:
-        status = "Fehler: Ordner nicht konfiguriert"
-        ADDON.setSetting('sync_status', status)
-        return False
-    
-    access_token = get_dropbox_access_token()
-    if not access_token:
-        status = "Fehler: Kein gültiger Access Token"
-        ADDON.setSetting('sync_status', status)
-        return False
-    
-    xbmc.log(f"Starte Sync mit Dropbox, Ordner: {dropbox_folder}", xbmc.LOGINFO)
-    
-    local_path = os.path.join(DATA_PATH, 'favourites.json')
-    local_exists = xbmcvfs.exists(local_path)
-    
-    # Dropbox-Inhalt und Zeitstempel abrufen
-    dropbox_content = None
-    dropbox_exists = False
-    dropbox_timestamp = None
-    
-    try:
-        dropbox_timestamp = get_file_timestamp_dropbox(access_token, dropbox_folder)
-        dropbox_exists = dropbox_timestamp is not None
-        if dropbox_exists:
-            dropbox_content = get_dropbox_file_content(access_token, dropbox_folder)
-    except Exception as e:
-        if "Token expired" in str(e):
-            xbmc.log("Token abgelaufen, breche ab", xbmc.LOGINFO)
-            status = "Token abgelaufen, bitte neu starten"
-            ADDON.setSetting('sync_status', status)
-            return False
-    
-    # Lokalen Inhalt und Zeitstempel lesen
-    local_content = None
-    local_timestamp = None
-    if local_exists:
-        try:
-            with open(local_path, 'r', encoding='utf-8') as f:
-                local_content = f.read()
-            local_timestamp = os.path.getmtime(local_path)
-        except Exception as e:
-            xbmc.log(f"Fehler beim Lesen der lokalen Datei: {str(e)}", xbmc.LOGERROR)
-    
-    # Fall 1: Keine Datei vorhanden
-    if not dropbox_exists and not local_exists:
-        status = "Keine Datei gefunden"
-        ADDON.setSetting('sync_status', status)
-        return False
-    
-    # Fall 2: Nur lokal vorhanden -> Upload
-    elif not dropbox_exists:
-        status = "Nur lokal vorhanden -> Upload"
-        ADDON.setSetting('sync_status', status)
-        result = upload_to_dropbox(access_token, dropbox_folder)
-        if result:
-            ADDON.setSetting('last_sync_time', datetime.now().strftime('%d.%m.%Y %H:%M:%S'))
-        return result
-    
-    # Fall 3: Nur in Dropbox vorhanden -> Download
-    elif not local_exists:
-        status = "Nur in Dropbox vorhanden -> Download"
-        ADDON.setSetting('sync_status', status)
-        result = download_from_dropbox(access_token, dropbox_folder)
-        if result:
-            ADDON.setSetting('last_sync_time', datetime.now().strftime('%d.%m.%Y %H:%M:%S'))
-        return result
-    
-    # Fall 4: Beide vorhanden -> Inhalt vergleichen
-    else:
-        # 1. Prüfen ob Inhalte identisch sind
-        if local_content == dropbox_content:
-            status = "Synchron (Inhalte identisch)"
-            ADDON.setSetting('sync_status', status)
-            ADDON.setSetting('last_sync_time', datetime.now().strftime('%d.%m.%Y %H:%M:%S'))
-            return True
+        import os
+        import json
+        import requests
+        from datetime import datetime
+        import calendar
         
-        # 2. Inhalte unterschiedlich -> Zeitstempel vergleichen (mit Toleranz)
-        tolerance = 60.0  # 60 Sekunden Toleranz
+        access_token = ADDON.getSetting('dropbox_access_token')
+        folder_name = ADDON.getSetting('dropbox_folder').strip()
         
-        xbmc.log(f"Local Timestamp: {local_timestamp}, Dropbox Timestamp: {dropbox_timestamp}", xbmc.LOGINFO)
-        
-        if local_timestamp > dropbox_timestamp + tolerance:
-            # Lokal neuer -> Upload
-            status = f"Lokal neuer -> Upload (lokal: {datetime.fromtimestamp(local_timestamp).strftime('%H:%M:%S')}, Dropbox: {datetime.fromtimestamp(dropbox_timestamp).strftime('%H:%M:%S')})"
-            ADDON.setSetting('sync_status', status)
-            result = upload_to_dropbox(access_token, dropbox_folder)
+        if not access_token:
+            xbmcgui.Dialog().notification('Lite Favourites', 'Dropbox nicht konfiguriert!', xbmcgui.NOTIFICATION_ERROR, 3000)
+            ADDON.setSetting('sync_status', 'Fehler: Token fehlt')
+            return
             
-        elif dropbox_timestamp > local_timestamp + tolerance:
-            # Dropbox neuer -> Download
-            status = f"Dropbox neuer -> Download (Dropbox: {datetime.fromtimestamp(dropbox_timestamp).strftime('%H:%M:%S')}, lokal: {datetime.fromtimestamp(local_timestamp).strftime('%H:%M:%S')})"
-            ADDON.setSetting('sync_status', status)
-            result = download_from_dropbox(access_token, dropbox_folder)
-            
+        if not folder_name or folder_name.lower() in ['apps', 'sandbox', 'lite_favourites_jan']:
+            dropbox_path = "/favourites.json"
         else:
-            # Zeitstempel zu nah beieinander -> Konflikt, lokal bevorzugen (Upload)
-            status = f"Zeitstempel-Konflikt (Unterschied < {tolerance} Sek.) -> Upload (lokal bevorzugt)"
-            ADDON.setSetting('sync_status', status)
-            result = upload_to_dropbox(access_token, dropbox_folder)
+            dropbox_path = f"/{folder_name}/favourites.json"
+            
+        local_path = xbmcvfs.translatePath('special://profile/addon_data/plugin.program.lite.favourites/favourites.json')
         
-        if result:
-            ADDON.setSetting('last_sync_time', datetime.now().strftime('%d.%m.%Y %H:%M:%S'))
-        return result
+        if not xbmcvfs.exists(local_path):
+            with open(local_path, 'w', encoding='utf-8') as f:
+                json.dump({"root": []}, f)
+                
+        try:
+            local_mtime = os.path.getmtime(local_path)
+        except:
+            local_mtime = 0
+            
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+        meta_data = {"path": dropbox_path}
+        
+        db_mtime = 0
+        try:
+            res = requests.post(
+                "https://api.dropboxapi.com/2/files/get_metadata",
+                headers=headers,
+                data=json.dumps(meta_data),
+                timeout=10
+            )
+            
+            if res.status_code == 200:
+                db_res = res.json()
+                db_time_str = db_res.get('server_modified', '')
+                if db_time_str:
+                    db_time = datetime.strptime(db_time_str, "%Y-%m-%dT%H:%M:%SZ")
+                    db_mtime = calendar.timegm(db_time.utctimetuple())
+        except Exception as e:
+            xbmc.log(f"LITE-FAV Sync-Fehler bei Metadaten: {str(e)}", xbmc.LOGERROR)
+            ADDON.setSetting('sync_status', 'Fehler: Metadaten-Abruf')
+            return
+            
+        now_str = datetime.now().strftime("%d.%m. %H:%M:%S")
+            
+        # 3. Synchronisations-Entscheidung (Toleranz: 3 Sekunden)
+        if db_mtime > (local_mtime + 3):
+            # DOWNLOAD
+            xbmc.log(f"LITE-FAV Sync: Cloud ist neuer. Starte Download...", xbmc.LOGWARNING)
+            download_headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Dropbox-API-Arg": json.dumps({"path": dropbox_path})
+            }
+            
+            try:
+                dl_res = requests.post(
+                    "https://content.dropboxapi.com/2/files/download",
+                    headers=download_headers,
+                    timeout=15
+                )
+                if dl_res.status_code == 200:
+                    with open(local_path, 'wb') as f:
+                        f.write(dl_res.content)
+                        
+                    os.utime(local_path, (db_mtime, db_mtime))
+                    xbmcgui.Dialog().notification('Lite Favourites', 'Sync: Favoriten aktualisiert (Download)', xbmcgui.NOTIFICATION_INFO, 2500)
+                    
+                    # --- STATUS UPDATE ---
+                    ADDON.setSetting('sync_status', f"{now_str} - Download (Cloud war neuer)")
+            except Exception as e:
+                xbmc.log(f"LITE-FAV Sync-Fehler beim Download: {str(e)}", xbmc.LOGERROR)
+                ADDON.setSetting('sync_status', f"{now_str} - Fehler beim Download")
+                
+        elif local_mtime > (db_mtime + 3) or db_mtime == 0:
+            # UPLOAD
+            xbmc.log(f"LITE-FAV Sync: Lokal ist neuer. Starte Upload...", xbmc.LOGWARNING)
+            
+            with open(local_path, 'rb') as f:
+                file_content = f.read()
+                
+            upload_headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Dropbox-API-Arg": json.dumps({
+                    "path": dropbox_path,
+                    "mode": "overwrite",
+                    "mute": True
+                }),
+                "Content-Type": "application/octet-stream"
+            }
+            
+            try:
+                up_res = requests.post(
+                    "https://content.dropboxapi.com/2/files/upload",
+                    headers=upload_headers,
+                    data=file_content,
+                    timeout=15
+                )
+                if up_res.status_code == 200:
+                    up_data = up_res.json()
+                    new_db_time_str = up_data.get('server_modified', '')
+                    if new_db_time_str:
+                        new_db_time = datetime.strptime(new_db_time_str, "%Y-%m-%dT%H:%M:%SZ")
+                        new_db_mtime = calendar.timegm(new_db_time.utctimetuple())
+                        os.utime(local_path, (new_db_mtime, new_db_mtime))
+                        
+                    xbmcgui.Dialog().notification('Lite Favourites', 'Sync: Erfolgreich hochgeladen', xbmcgui.NOTIFICATION_INFO, 2500)
+                    
+                    # --- STATUS UPDATE ---
+                    ADDON.setSetting('sync_status', f"{now_str} - Upload (Lokal war neuer)")
+            except Exception as e:
+                xbmc.log(f"LITE-FAV Sync-Fehler beim Upload: {str(e)}", xbmc.LOGERROR)
+                ADDON.setSetting('sync_status', f"{now_str} - Fehler beim Upload")
+                
+        else:
+            # BEIDE GLEICH ALT
+            xbmcgui.Dialog().notification('Lite Favourites', 'Sync: Bereits auf dem neuesten Stand', xbmcgui.NOTIFICATION_INFO, 2500)
+            xbmc.log("LITE-FAV Sync: Lokale Liste und Cloud sind identisch.", xbmc.LOGINFO)
+            
+            # --- STATUS UPDATE ---
+            ADDON.setSetting('sync_status', f"{now_str} - Identisch (keine Änderung)")
 
 def schedule_sync():
     """Timer für regelmäßige Synchronisation"""

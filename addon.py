@@ -4,6 +4,7 @@
 # edit 2026-05-14 add import dialog - Alte Super Favourites XML
 # edit 2026-05-14 add DUPLIKATS-CHECK für Import  Super Favourites
 # edit 2026-05-21 add root Einstellungen, Sync-Dropbox, Globale Suche mit Turbo-Fokus & TMDb-Fallback
+# edit 2026-05-21 Migration change Dropbox-Appfolder-Struktur + Sync-Fix
 import sys
 import os
 import json
@@ -1500,8 +1501,24 @@ def sync_with_dropbox():
         import os
         import json
         import requests
-        from datetime import datetime
+        import datetime
         import calendar
+        
+        # --- FIX: MANUELLER PARSER UMGEHT DEN KODI 21 'STRPTIME' BUG ---
+        def _parse_db_time(time_str):
+            try:
+                # Dropbox Format: "2026-05-21T17:55:53Z"
+                y = int(time_str[0:4])
+                mo = int(time_str[5:7])
+                d = int(time_str[8:10])
+                h = int(time_str[11:13])
+                mi = int(time_str[14:16])
+                s = int(time_str[17:19])
+                dt = datetime.datetime(y, mo, d, h, mi, s)
+                return calendar.timegm(dt.utctimetuple())
+            except:
+                return 0
+        # ---------------------------------------------------------------
         
         access_token = ADDON.getSetting('dropbox_access_token')
         folder_name = ADDON.getSetting('dropbox_folder').strip()
@@ -1511,34 +1528,100 @@ def sync_with_dropbox():
             ADDON.setSetting('sync_status', 'Fehler: Token fehlt')
             return
             
-        if not folder_name or folder_name.lower() in ['apps', 'sandbox', 'lite_favourites_jan']:
-            dropbox_path = "/favourites.json"
-        else:
-            dropbox_path = f"/{folder_name}/favourites.json"
+        dropbox_path = "/favourites.json"
+        old_dropbox_path = f"/{folder_name}/favourites.json" if folder_name else "/lite_favourites_jan/favourites.json"
             
         local_path = xbmcvfs.translatePath('special://profile/addon_data/plugin.program.lite.favourites/favourites.json')
         
-        if not xbmcvfs.exists(local_path):
+        # --- BUGFIX: SPLIT-BRAIN SCHUTZ BEI GEKILLTER LOKALER DATEI ---
+        file_existed = xbmcvfs.exists(local_path)
+        if not file_existed:
             with open(local_path, 'w', encoding='utf-8') as f:
                 json.dump({"root": []}, f)
-                
-        try:
-            local_mtime = os.path.getmtime(local_path)
-        except:
+            # Wir setzen die lokale Zeit auf 0! Dadurch ist die Cloud IMMER neuer,
+            # falls dort bereits eine Datei existiert -> Es wird ein DOWNLOAD erzwungen.
             local_mtime = 0
+        else:
+            try:
+                local_mtime = os.path.getmtime(local_path)
+            except:
+                local_mtime = 0
+        # --------------------------------------------------------------
             
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json"
         }
-        meta_data = {"path": dropbox_path}
         
+        migration_performed = False
+        try:
+            res = requests.post(
+                "https://api.dropboxapi.com/2/files/get_metadata",
+                headers=headers,
+                data=json.dumps({"path": dropbox_path}),
+                timeout=10
+            )
+            
+            if res.status_code != 200 and old_dropbox_path != dropbox_path:
+                old_res = requests.post(
+                    "https://api.dropboxapi.com/2/files/get_metadata",
+                    headers=headers,
+                    data=json.dumps({"path": old_dropbox_path}),
+                    timeout=10
+                )
+                
+                if old_res.status_code == 200:
+                    xbmc.log("LITE-FAV: Alte Datei gefunden! Warte auf User-Bestätigung...", xbmc.LOGWARNING)
+                    dialog = xbmcgui.Dialog()
+                    warn_msg = (
+                        "Alte Dropbox-Struktur erkannt!\n"
+                        "Soll diese nun auf das neue Format migriert werden?\n\n"
+                        "[B]WICHTIG:[/B] Du musst das Addon danach auf ALLEN deinen Geräten\n"
+                        "auf Version 1.2.6+ updaten, sonst funktioniert deren Sync nicht mehr!"
+                    )
+                    
+                    if not dialog.yesno('Wichtiges Update (Cloud Migration)', warn_msg):
+                        xbmc.log("LITE-FAV: Migration durch Benutzer abgebrochen.", xbmc.LOGWARNING)
+                        ADDON.setSetting('sync_status', 'Abbruch: Migration nicht bestätigt')
+                        return
+                    
+                    move_data = {
+                        "from_path": old_dropbox_path,
+                        "to_path": dropbox_path,
+                        "allow_shared_folder": False,
+                        "autorename": False,
+                        "allow_ownership_transfer": False
+                    }
+                    move_res = requests.post(
+                        "https://api.dropboxapi.com/2/files/move_v2",
+                        headers=headers,
+                        data=json.dumps(move_data),
+                        timeout=10
+                    )
+                    
+                    if move_res.status_code == 200:
+                        xbmc.log("LITE-FAV: Datei erfolgreich in den Hauptordner verschoben.", xbmc.LOGWARNING)
+                        migration_performed = True
+                        
+                        try:
+                            old_folder_path = f"/{folder_name}" if folder_name else "/lite_favourites_jan"
+                            requests.post(
+                                "https://api.dropboxapi.com/2/files/delete_v2",
+                                headers=headers,
+                                data=json.dumps({"path": old_folder_path}),
+                                timeout=5
+                            )
+                        except:
+                            pass
+        except Exception as e:
+            xbmc.log(f"LITE-FAV Migrations-Fehler: {str(e)}", xbmc.LOGERROR)
+            
         db_mtime = 0
         try:
             res = requests.post(
                 "https://api.dropboxapi.com/2/files/get_metadata",
                 headers=headers,
-                data=json.dumps(meta_data),
+                data=json.dumps({"path": dropbox_path}),
                 timeout=10
             )
             
@@ -1546,19 +1629,16 @@ def sync_with_dropbox():
                 db_res = res.json()
                 db_time_str = db_res.get('server_modified', '')
                 if db_time_str:
-                    db_time = datetime.strptime(db_time_str, "%Y-%m-%dT%H:%M:%SZ")
-                    db_mtime = calendar.timegm(db_time.utctimetuple())
+                    db_mtime = _parse_db_time(db_time_str)
         except Exception as e:
             xbmc.log(f"LITE-FAV Sync-Fehler bei Metadaten: {str(e)}", xbmc.LOGERROR)
             ADDON.setSetting('sync_status', 'Fehler: Metadaten-Abruf')
             return
             
-        now_str = datetime.now().strftime("%d.%m. %H:%M:%S")
+        now_str = datetime.datetime.now().strftime("%d.%m. %H:%M:%S")
             
-        # 3. Synchronisations-Entscheidung (Toleranz: 3 Sekunden)
-        if db_mtime > (local_mtime + 3):
-            # DOWNLOAD
-            xbmc.log(f"LITE-FAV Sync: Cloud ist neuer. Starte Download...", xbmc.LOGWARNING)
+        if db_mtime > (local_mtime + 3) or migration_performed:
+            xbmc.log(f"LITE-FAV Sync: Cloud ist neuer (oder frisch migriert). Starte Download...", xbmc.LOGWARNING)
             download_headers = {
                 "Authorization": f"Bearer {access_token}",
                 "Dropbox-API-Arg": json.dumps({"path": dropbox_path})
@@ -1574,17 +1654,19 @@ def sync_with_dropbox():
                     with open(local_path, 'wb') as f:
                         f.write(dl_res.content)
                         
-                    os.utime(local_path, (db_mtime, db_mtime))
-                    xbmcgui.Dialog().notification('Lite Favourites', 'Sync: Favoriten aktualisiert (Download)', xbmcgui.NOTIFICATION_INFO, 2500)
+                    if db_mtime > 0:
+                        os.utime(local_path, (db_mtime, db_mtime))
                     
-                    # --- STATUS UPDATE ---
-                    ADDON.setSetting('sync_status', f"{now_str} - Download (Cloud war neuer)")
+                    status_msg = "Sync: Cloud-Migration erfolgreich!" if migration_performed else "Sync: Favoriten aktualisiert (Download)"
+                    xbmcgui.Dialog().notification('Lite Favourites', status_msg, xbmcgui.NOTIFICATION_INFO, 2500)
+                    
+                    status_setting = f"{now_str} - Migration & Download" if migration_performed else f"{now_str} - Download (Cloud war neuer)"
+                    ADDON.setSetting('sync_status', status_setting)
             except Exception as e:
                 xbmc.log(f"LITE-FAV Sync-Fehler beim Download: {str(e)}", xbmc.LOGERROR)
                 ADDON.setSetting('sync_status', f"{now_str} - Fehler beim Download")
                 
         elif local_mtime > (db_mtime + 3) or db_mtime == 0:
-            # UPLOAD
             xbmc.log(f"LITE-FAV Sync: Lokal ist neuer. Starte Upload...", xbmc.LOGWARNING)
             
             with open(local_path, 'rb') as f:
@@ -1611,24 +1693,18 @@ def sync_with_dropbox():
                     up_data = up_res.json()
                     new_db_time_str = up_data.get('server_modified', '')
                     if new_db_time_str:
-                        new_db_time = datetime.strptime(new_db_time_str, "%Y-%m-%dT%H:%M:%SZ")
-                        new_db_mtime = calendar.timegm(new_db_time.utctimetuple())
-                        os.utime(local_path, (new_db_mtime, new_db_mtime))
+                        new_db_mtime = _parse_db_time(new_db_time_str)
+                        if new_db_mtime > 0:
+                            os.utime(local_path, (new_db_mtime, new_db_mtime))
                         
                     xbmcgui.Dialog().notification('Lite Favourites', 'Sync: Erfolgreich hochgeladen', xbmcgui.NOTIFICATION_INFO, 2500)
-                    
-                    # --- STATUS UPDATE ---
                     ADDON.setSetting('sync_status', f"{now_str} - Upload (Lokal war neuer)")
             except Exception as e:
                 xbmc.log(f"LITE-FAV Sync-Fehler beim Upload: {str(e)}", xbmc.LOGERROR)
                 ADDON.setSetting('sync_status', f"{now_str} - Fehler beim Upload")
                 
         else:
-            # BEIDE GLEICH ALT
             xbmcgui.Dialog().notification('Lite Favourites', 'Sync: Bereits auf dem neuesten Stand', xbmcgui.NOTIFICATION_INFO, 2500)
-            xbmc.log("LITE-FAV Sync: Lokale Liste und Cloud sind identisch.", xbmc.LOGINFO)
-            
-            # --- STATUS UPDATE ---
             ADDON.setSetting('sync_status', f"{now_str} - Identisch (keine Änderung)")
 
 def schedule_sync():

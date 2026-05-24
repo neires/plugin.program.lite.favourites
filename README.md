@@ -93,14 +93,15 @@ Der Sync ermöglicht es, deine Favoriten-Liste auf allen Kodi-Geräten identisch
 
 ### 1. Dropbox App erstellen
 1. Logge dich bei [Dropbox Developers](https://www.dropbox.com/developers/apps) ein und klicke auf **"Create app"**.
-2. Wähle: **"Scoped access"**, **"Full Dropbox"** und gib der App einen Namen.
-3. Reiter **"Permissions"**: Aktiviere unter "Files and folders" folgende Punkte:
+2. Wähle: **"Scoped access"**, **"App folder– Access to a single folder created specifically for your app."**
+3. gib der App einen Namen. Danach könnt ihr noch App folder name ändern.
+4. Reiter **"Permissions"**: Aktiviere unter "Files and folders" folgende Punkte:
    - `files.metadata.read`
    - `files.metadata.write`
    - `files.content.read`
    - `files.content.write`
-4. Klicke auf **"Submit"**, um die Berechtigungen zu speichern.
-5. Kopiere im Reiter **"Settings"** den **App Key** und das **App Secret**.
+5. Klicke auf **"Submit"**, um die Berechtigungen zu speichern.
+6. Kopiere im Reiter **"Settings"** den **App Key** und das **App Secret**.
 
 ### 2. Tokens generieren (am Computer)
 Nutze das im Repository, oder im Plugin-Ordner, beiliegende Skript `dropbox_token.py`:

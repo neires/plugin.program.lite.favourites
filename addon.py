@@ -938,11 +938,24 @@ def search_items():
                     else:
                         type_str = "Film"
                         
-                    li = xbmcgui.ListItem(f"{name} [COLOR gray]({type_str} in: {display_folder})[/COLOR]")
+                    # --- FIX: DEN KOMPLETTEN TEXT ALS VARIABLE SPEICHERN ---
+                    full_label = f"{name} [COLOR gray]({type_str} in: {display_folder})[/COLOR]"
+                    li = xbmcgui.ListItem(full_label)
                     
                     if 'art' in item and item['art']:
                         li.setArt(clean_artwork(item['art']))
                         
+                    # Wir übergeben nun full_label als title, damit Kodi es nicht überschreibt!
+                    info_dict = {'title': full_label}
+                    if item_type == 'tvshow':
+                        info_dict['mediatype'] = 'tvshow'
+                        info_dict['tvshowtitle'] = name # Hier behalten wir den reinen Namen für die DB
+                    else:
+                        info_dict['mediatype'] = 'movie'
+                        
+                    li.setInfo('video', info_dict)
+                    # --------------------------------------------------------
+                    
                     safe_focus = quote(name)
                     target_url = build_url({
                         'mode': 'search_goto',
@@ -950,26 +963,26 @@ def search_items():
                         'focus_item': safe_focus
                     })
                     
+                    context_menu = [
+                        ('Zum Ziel springen', 'RunPlugin(' + target_url + ')')
+                    ]
+                    li.addContextMenuItems(context_menu)
+                    
                     xbmcplugin.addDirectoryItem(handle, target_url, li, isFolder=False)
                     
-        # --- NEU: WENN NICHTS GEFUNDEN WURDE ---
         if match_count == 0:
-            # 1. Erneut suchen Button
             li_retry = xbmcgui.ListItem('[I]Keine Treffer gefunden - Erneut suchen...[/I]')
             search_icon = 'DefaultAddonsSearch.png'
             li_retry.setArt({'icon': search_icon, 'thumb': search_icon, 'poster': search_icon})
             li_retry.setProperty('IsPlayable', 'false')
             retry_url = build_url({'mode': 'search'})
-            # isFolder=True ruft die Suche quasi als neuen Ordner auf
             xbmcplugin.addDirectoryItem(handle, retry_url, li_retry, isFolder=True)
             
-            # 2. Dummy: Suche mit TMDb Helper
-            li_tmdb = xbmcgui.ListItem(f'[B]"{query}" mit TMDb Helper suchen...[/B]')
+            li_tmdb = xbmcgui.ListItem(f'[B][🔍] "{query}" mit TMDb Helper suchen...[/B]')
             tmdb_icon = 'DefaultVideo.png'
             li_tmdb.setArt({'icon': tmdb_icon, 'thumb': tmdb_icon, 'poster': tmdb_icon})
             li_tmdb.setProperty('IsPlayable', 'false')
             dummy_url = build_url({'mode': 'search_tmdb_dummy', 'query': query})
-            # isFolder=False, da dies eine Aktion im Router auslöst
             xbmcplugin.addDirectoryItem(handle, dummy_url, li_tmdb, isFolder=False)
             
         xbmcplugin.endOfDirectory(handle, updateListing=False, cacheToDisc=False)

@@ -4,7 +4,7 @@
 # edit 2026-05-14 add import dialog - Alte Super Favourites XML
 # edit 2026-05-14 add DUPLIKATS-CHECK für Import  Super Favourites
 # edit 2026-05-21 add root Einstellungen, Sync-Dropbox, Globale Suche mit Turbo-Fokus & TMDb-Fallback
-# edit 2026-05-21 Migration change Dropbox-Appfolder-Struktur + Sync-Fix
+# edit 2026-05-25 Migration change Dropbox-Appfolder-Struktur + Sync-Fix
 import sys
 import os
 import json
@@ -1501,10 +1501,10 @@ def sync_with_dropbox():
         import os
         import json
         import requests
-        import datetime
         import calendar
+        import datetime as dt_module
         
-        # --- FIX: MANUELLER PARSER UMGEHT DEN KODI 21 'STRPTIME' BUG ---
+        # --- FIX: ABSOLUT SICHERER PARSER OHNE NAMESPACE-KOLLISION ---
         def _parse_db_time(time_str):
             try:
                 # Dropbox Format: "2026-05-21T17:55:53Z"
@@ -1514,39 +1514,41 @@ def sync_with_dropbox():
                 h = int(time_str[11:13])
                 mi = int(time_str[14:16])
                 s = int(time_str[17:19])
-                dt = datetime.datetime(y, mo, d, h, mi, s)
+                dt = dt_module.datetime(y, mo, d, h, mi, s)
                 return calendar.timegm(dt.utctimetuple())
-            except:
+            except Exception as e:
+                xbmc.log(f"LITE-FAV Zeit-Parser Fehler: {str(e)}", xbmc.LOGERROR)
                 return 0
         # ---------------------------------------------------------------
         
-        access_token = ADDON.getSetting('dropbox_access_token')
+        # --- NEU: WIR NUTZEN DEINE BEREITS INTEGRIERTE REFRESH-FUNKTION! ---
+        access_token = get_dropbox_access_token()
         folder_name = ADDON.getSetting('dropbox_folder').strip()
         
         if not access_token:
-            xbmcgui.Dialog().notification('Lite Favourites', 'Dropbox nicht konfiguriert!', xbmcgui.NOTIFICATION_ERROR, 3000)
-            ADDON.setSetting('sync_status', 'Fehler: Token fehlt')
+            xbmcgui.Dialog().notification('Lite Favourites', 'Dropbox Token fehlt oder ungültig!', xbmcgui.NOTIFICATION_ERROR, 3000)
+            now_str = dt_module.datetime.now().strftime("%d.%m. %H:%M:%S")
+            ADDON.setSetting('sync_status', f"{now_str} - Fehler: Token Refresh fehlgeschlagen")
             return
+        # -------------------------------------------------------------------
             
         dropbox_path = "/favourites.json"
         old_dropbox_path = f"/{folder_name}/favourites.json" if folder_name else "/lite_favourites_jan/favourites.json"
             
         local_path = xbmcvfs.translatePath('special://profile/addon_data/plugin.program.lite.favourites/favourites.json')
         
-        # --- BUGFIX: SPLIT-BRAIN SCHUTZ BEI GEKILLTER LOKALER DATEI ---
+        # --- SPLIT-BRAIN SCHUTZ MIT DOWNLOAD-ZWANG ---
         file_existed = xbmcvfs.exists(local_path)
         if not file_existed:
             with open(local_path, 'w', encoding='utf-8') as f:
                 json.dump({"root": []}, f)
-            # Wir setzen die lokale Zeit auf 0! Dadurch ist die Cloud IMMER neuer,
-            # falls dort bereits eine Datei existiert -> Es wird ein DOWNLOAD erzwungen.
             local_mtime = 0
         else:
             try:
                 local_mtime = os.path.getmtime(local_path)
             except:
                 local_mtime = 0
-        # --------------------------------------------------------------
+        # ----------------------------------------------
             
         headers = {
             "Authorization": f"Bearer {access_token}",
@@ -1562,7 +1564,7 @@ def sync_with_dropbox():
                 timeout=10
             )
             
-            if res.status_code != 200 and old_dropbox_path != dropbox_path:
+            if (res.status_code == 409 or res.status_code == 404) and old_dropbox_path != dropbox_path:
                 old_res = requests.post(
                     "https://api.dropboxapi.com/2/files/get_metadata",
                     headers=headers,
@@ -1616,6 +1618,7 @@ def sync_with_dropbox():
         except Exception as e:
             xbmc.log(f"LITE-FAV Migrations-Fehler: {str(e)}", xbmc.LOGERROR)
             
+        # Cloud-Metadaten abrufen
         db_mtime = 0
         try:
             res = requests.post(
@@ -1630,15 +1633,28 @@ def sync_with_dropbox():
                 db_time_str = db_res.get('server_modified', '')
                 if db_time_str:
                     db_mtime = _parse_db_time(db_time_str)
+            elif res.status_code == 409 or res.status_code == 404:
+                # Datei existiert noch gar nicht in der Cloud (neuer User)
+                db_mtime = 0
+            else:
+                # FEHLER BEIM METADATEN-ABRUF
+                xbmc.log(f"LITE-FAV Metadaten-Fehler: Status {res.status_code} - {res.text}", xbmc.LOGERROR)
+                now_str = dt_module.datetime.now().strftime("%d.%m. %H:%M:%S")
+                ADDON.setSetting('sync_status', f"{now_str} - Fehler: Metadaten ({res.status_code})")
+                return
         except Exception as e:
             xbmc.log(f"LITE-FAV Sync-Fehler bei Metadaten: {str(e)}", xbmc.LOGERROR)
-            ADDON.setSetting('sync_status', 'Fehler: Metadaten-Abruf')
+            ADDON.setSetting('sync_status', 'Fehler: Metadaten-Ausnahme')
             return
             
-        now_str = datetime.datetime.now().strftime("%d.%m. %H:%M:%S")
+        now_str = dt_module.datetime.now().strftime("%d.%m. %H:%M:%S")
+        
+        # Sicherheits-Zwang: Wenn lokal gelöscht wurde und Cloud existiert -> DOWNLOAD!
+        force_download = (not file_existed and db_mtime > 0)
             
-        if db_mtime > (local_mtime + 3) or migration_performed:
-            xbmc.log(f"LITE-FAV Sync: Cloud ist neuer (oder frisch migriert). Starte Download...", xbmc.LOGWARNING)
+        if db_mtime > (local_mtime + 3) or migration_performed or force_download:
+            # DOWNLOAD
+            xbmc.log(f"LITE-FAV Sync: Cloud ist neuer (oder erzwungen). Starte Download...", xbmc.LOGWARNING)
             download_headers = {
                 "Authorization": f"Bearer {access_token}",
                 "Dropbox-API-Arg": json.dumps({"path": dropbox_path})
@@ -1662,11 +1678,15 @@ def sync_with_dropbox():
                     
                     status_setting = f"{now_str} - Migration & Download" if migration_performed else f"{now_str} - Download (Cloud war neuer)"
                     ADDON.setSetting('sync_status', status_setting)
+                else:
+                    xbmc.log(f"LITE-FAV Download-Fehler: Status {dl_res.status_code} - {dl_res.text}", xbmc.LOGERROR)
+                    ADDON.setSetting('sync_status', f"{now_str} - Fehler: Download-Code ({dl_res.status_code})")
             except Exception as e:
                 xbmc.log(f"LITE-FAV Sync-Fehler beim Download: {str(e)}", xbmc.LOGERROR)
                 ADDON.setSetting('sync_status', f"{now_str} - Fehler beim Download")
                 
         elif local_mtime > (db_mtime + 3) or db_mtime == 0:
+            # UPLOAD
             xbmc.log(f"LITE-FAV Sync: Lokal ist neuer. Starte Upload...", xbmc.LOGWARNING)
             
             with open(local_path, 'rb') as f:
@@ -1699,6 +1719,9 @@ def sync_with_dropbox():
                         
                     xbmcgui.Dialog().notification('Lite Favourites', 'Sync: Erfolgreich hochgeladen', xbmcgui.NOTIFICATION_INFO, 2500)
                     ADDON.setSetting('sync_status', f"{now_str} - Upload (Lokal war neuer)")
+                else:
+                    xbmc.log(f"LITE-FAV Upload-Fehler: Status {up_res.status_code} - {up_res.text}", xbmc.LOGERROR)
+                    ADDON.setSetting('sync_status', f"{now_str} - Fehler: Upload-Code ({up_res.status_code})")
             except Exception as e:
                 xbmc.log(f"LITE-FAV Sync-Fehler beim Upload: {str(e)}", xbmc.LOGERROR)
                 ADDON.setSetting('sync_status', f"{now_str} - Fehler beim Upload")
@@ -1708,34 +1731,60 @@ def sync_with_dropbox():
             ADDON.setSetting('sync_status', f"{now_str} - Identisch (keine Änderung)")
 
 def schedule_sync():
-    """Timer für regelmäßige Synchronisation"""
-    interval = int(ADDON.getSetting('sync_interval'))
-    
-    if interval <= 0:
-        return
-    
-    last_sync = ADDON.getSetting('last_sync_time')
-    
-    if last_sync != "Nie":
+        """Timer für regelmäßige Synchronisation im Hintergrund"""
+        import threading
+        import datetime as dt_module
+        
         try:
-            last_sync_time = datetime.strptime(last_sync, '%d.%m.%Y %H:%M:%S')
-            time_diff = (datetime.now() - last_sync_time).total_seconds() / 60
-            
-            if time_diff < interval:
-                return
+            interval = int(ADDON.getSetting('sync_interval'))
         except:
-            pass
-    
-    sync_with_dropbox()
-
+            interval = 0
+            
+        if interval <= 0:
+            return
+            
+        last_sync = ADDON.getSetting('last_sync_time')
+        now = dt_module.datetime.now()
+        
+        if last_sync and last_sync != "Nie":
+            try:
+                # Manueller Parser, um den Kodi 21 strptime-Bug zu umgehen
+                # Format: "25.05.2026 12:30:15"
+                d = int(last_sync[0:2])
+                m = int(last_sync[3:5])
+                y = int(last_sync[6:10])
+                h = int(last_sync[11:13])
+                mi = int(last_sync[14:16])
+                s = int(last_sync[17:19])
+                
+                last_sync_time = dt_module.datetime(y, m, d, h, mi, s)
+                time_diff = (now - last_sync_time).total_seconds() / 60
+                
+                if time_diff < interval:
+                    return
+            except Exception as e:
+                xbmc.log(f"LITE-FAV Timer-Fehler: {str(e)}", xbmc.LOGWARNING)
+                pass
+                
+        # --- FIX 1: TIMER SOFORT ZURÜCKSETZEN ---
+        # Damit er beim nächsten Start nicht direkt wieder feuert!
+        new_time_str = now.strftime('%d.%m.%Y %H:%M:%S')
+        ADDON.setSetting('last_sync_time', new_time_str)
+        
+        # --- FIX 2: UNSICHTBARER HINTERGRUND-THREAD ---
+        # Kodi öffnet das Menü sofort, der Sync läuft lautlos im Hintergrund!
+        sync_thread = threading.Thread(target=sync_with_dropbox)
+        sync_thread.daemon = True
+        sync_thread.start()
 def router(paramstring):
         params = dict(parse_qsl(paramstring))
         
         if not params:
-            access_token = ADDON.getSetting('dropbox_access_token')
-            if access_token and int(ADDON.getSetting('sync_interval')) > 0:
-                schedule_sync()
+            # --- NEU: ABSOLUT SAUBERER START ---
+            # Der Timer prüft im Hintergrund selbst, ob Token und Intervall stimmen!
+            schedule_sync()
             list_directory()
+            # -----------------------------------
             
         elif params.get('mode') == 'browse':
             focus_target = params.get('focus_item')
@@ -1861,7 +1910,6 @@ def router(paramstring):
         elif params.get('mode') == 'open_settings':
             xbmc.executebuiltin(f'Addon.OpenSettings({ADDON_ID})')
             
-        # --- NEU: DER DUMMY FÜR DEN TMDB HELPER ---
         elif params.get('mode') == 'search_tmdb_dummy':
             query = params.get('query', '')
             
@@ -1872,7 +1920,6 @@ def router(paramstring):
                 
             safe_query = quote(query)
             
-            # TMDb Helper braucht zwingend den Typ. Wir lassen den User kurz wählen:
             dialog = xbmcgui.Dialog()
             ret = dialog.select('TMDb Helper Suche: Was suchst du?', ['Filme', 'Serien'])
             
@@ -1881,12 +1928,9 @@ def router(paramstring):
             elif ret == 1:
                 search_type = 'tv'
             else:
-                return # User hat abgebrochen
+                return
                 
-            # Die fertige, fehlerfreie URL für den TMDb Helper
             tmdb_url = f"plugin://plugin.video.themoviedb.helper/?info=search&type={search_type}&query={safe_query}"
-            
-            # Suchergebnis-Ansicht öffnen
             xbmc.executebuiltin(f'Container.Update("{tmdb_url}")')
             
 if __name__ == '__main__':

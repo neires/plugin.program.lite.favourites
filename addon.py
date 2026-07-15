@@ -65,10 +65,15 @@ def clean_artwork(art_dict):
     if not art_dict:
         return {}
     cleaned = {}
-    if 'poster' in art_dict and art_dict['poster']:
-        cleaned['poster'] = art_dict['poster']
-    elif 'thumb' in art_dict and art_dict['thumb']:
-        cleaned['poster'] = art_dict['thumb']
+    img = art_dict.get('poster') or art_dict.get('thumb') or art_dict.get('icon')    
+    if img:
+        cleaned['poster'] = img
+        cleaned['thumb'] = img
+        cleaned['icon'] = img
+    if 'fanart' in art_dict and art_dict['fanart']:
+        cleaned['fanart'] = art_dict['fanart']
+    elif 'clearart' in art_dict and art_dict['clearart']:
+        cleaned['clearart'] = art_dict['clearart']        
     return cleaned
 
 def _norm(s):
